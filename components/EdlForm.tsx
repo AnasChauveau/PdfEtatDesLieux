@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { User, MapPin, Calendar, ArrowRight, Camera, CheckCircle2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
+import SignatureCanvas from 'react-signature-canvas';
 
 export default function EdlForm() {
     const [step, setStep] = useState(1);
@@ -36,6 +37,8 @@ export default function EdlForm() {
             { nom: "Plafond", etat: "Bon état", observations: "" }
         ]
     });
+
+    const sigPad = useRef<any>(null);
 
     // 1. FONCTION UNIVERSELLE D'UPLOAD (Côté Supabase)
     const uploadToSupabase = async (file: File, folder: string) => {
@@ -448,37 +451,60 @@ export default function EdlForm() {
             </div>
             )}
             {step === 4 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 text-center">
-                <h2 className="text-xl font-semibold text-slate-800">Dernière étape : Signature</h2>
-                
-                <div className="p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
-                  <p className="text-sm text-slate-500 mb-4 italic">
-                    En cliquant sur le bouton ci-dessous, vous certifiez que les informations saisies pour le logement à l'adresse :  
-                    <span className="block font-bold text-slate-800 mt-1">{formData.metadata.adresse_bien}</span> sont exactes.
-                  </p>
-                  
-                  <div className="grid grid-cols-2 gap-4 mt-6">
-                    <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                      <p className="text-xs font-bold uppercase text-slate-400 mb-2">Locataire</p>
-                      <p className="font-semibold text-slate-800">{formData.metadata.locataire.nom || "Non renseigné"}</p>
-                    </div>
-                    <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                      <p className="text-xs font-bold uppercase text-slate-400 mb-2">Propriétaire</p>
-                      <p className="font-semibold text-slate-800">{formData.metadata.bailleur.nom || "Non renseigné"}</p>
-                    </div>
-                  </div>
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                <div className="text-center">
+                  <h2 className="text-xl font-bold text-slate-800">Signature Digitale</h2>
+                  <p className="text-sm text-slate-500">Signez à l'intérieur du cadre ci-dessous</p>
                 </div>
 
-                <div className="flex flex-col gap-3 pt-6">
+                {/* Le Cadre de Signature */}
+                <div className="border-2 border-slate-200 rounded-2xl bg-white overflow-hidden shadow-inner">
+                  <SignatureCanvas 
+                    ref={sigPad}
+                    penColor='black'
+                    canvasProps={{
+                      className: "signature-pad-canvas w-full h-64 bg-white"
+                    }}
+                  />
+                </div>
+
+                <div className="flex gap-2">
                   <button 
-                    onClick={saveRapport}
-                    className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-green-100 hover:bg-green-700 transition"
+                    onClick={() => sigPad.current.clear()}
+                    className="flex-1 py-2 text-xs font-bold text-slate-400 uppercase hover:text-red-500 transition"
                   >
-                    Signer et Enregistrer
+                    Effacer la signature
                   </button>
-                  <button onClick={() => setStep(3)} className="text-slate-500 font-medium py-2">
-                    Retour pour modifier
+                </div>
+
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                  <p className="text-[10px] text-blue-800 leading-relaxed text-center">
+                    En signant, les parties valident l'état du logement à la date du {formData.metadata.date}. 
+                    Ce document sera archivé conformément au dispositif Jeanbrun 2026.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3 pt-4">
+                  <button 
+                    onClick={async () => {
+                      if (sigPad.current.isEmpty()) {
+                        alert("Veuillez signer avant de valider.");
+                        return;
+                      }
+                      // On transforme le dessin en image (base64)
+                      const signatureData = sigPad.current.getTrimmedCanvas().toDataURL('image/png');
+                      
+                      // On peut soit l'envoyer à Supabase, soit la mettre direct dans le JSON
+                      setFormData({...formData, signature: signatureData} as any);
+                      
+                      // Lancer l'enregistrement final
+                      saveRapport();
+                    }}
+                    className="w-full bg-slate-900 text-white py-4 rounded-2xl font-extrabold shadow-lg hover:bg-black transition"
+                  >
+                    Valider et Générer le PDF
                   </button>
+                  <button onClick={() => setStep(3)} className="text-slate-400 text-sm font-medium">Retour</button>
                 </div>
               </div>
             )}

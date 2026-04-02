@@ -11,3 +11,9 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Force l'affichage d'une petite croix pour viser précisément lors de la signature */
+.signature-pad-canvas {
+  cursor: crosshair !important;
+  touch-action: none; /* Empêche la page de défiler pendant qu'on signe sur mobile */
+}
