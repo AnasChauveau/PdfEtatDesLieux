@@ -130,31 +130,45 @@ export default function EdlForm() {
       try {
         const photosToDelete: string[] = [];
 
-        // 1. On scanne les compteurs
+        // Fonction pour extraire le path peu importe où il est dans l'URL
+        const extractPath = (url: string) => {
+          if (!url) return null;
+          const bucketName = 'photos-etats-des-lieux/';
+          if (url.includes(bucketName)) {
+            return url.split(bucketName)[1];
+          }
+          return null;
+        };
+
+        // 1. Compteurs
         data.compteurs.forEach((c: any) => {
-          if (c.photo_url) photosToDelete.push(c.photo_url);
+          const p = extractPath(c.photo_url); if(p) photosToDelete.push(p);
         });
 
-        // 2. On scanne les pièces et les dégradations
-        data.pieces.forEach((p: any) => {
-          if (p.photo_url) photosToDelete.push(p.photo_url);
-          p.elements.forEach((el: any) => {
-            if (el.photo_url) photosToDelete.push(el.photo_url);
+        // 2. Pièces et Éléments
+        data.pieces.forEach((piece: any) => {
+          // Photo de la pièce entière
+          const pPiece = extractPath(piece.photo_url); if(pPiece) photosToDelete.push(pPiece);
+          
+          // Photos des éléments (dégâts)
+          piece.elements.forEach((el: any) => {
+            const pEl = extractPath(el.photo_url); if(pEl) photosToDelete.push(pEl);
           });
         });
 
         if (photosToDelete.length > 0) {
-          // On extrait le chemin relatif (tout ce qui est après le nom du bucket)
-          const paths = photosToDelete.map(url => {
-            const parts = url.split('photos-etats-des-lieux/');
-            return parts[1]; // Récupère juste "compteurs/image.jpg"
-          }).filter(path => path !== undefined);
+          // On retire les doublons éventuels
+          const uniquePaths = [...new Set(photosToDelete)];
+          
+          const { error } = await supabase.storage
+            .from('photos-etats-des-lieux')
+            .remove(uniquePaths);
 
-          await supabase.storage.from('photos-etats-des-lieux').remove(paths);
-          console.log("🧹 Nettoyage terminé :", paths.length, "fichiers supprimés.");
+          if (error) console.error("Erreur suppression fichiers:", error);
+          else console.log(`🧹 Nettoyage réussi : ${uniquePaths.length} photos supprimées.`);
         }
       } catch (err) {
-        console.error("Erreur lors du nettoyage :", err);
+        console.error("Erreur globale nettoyage:", err);
       }
     };
 
