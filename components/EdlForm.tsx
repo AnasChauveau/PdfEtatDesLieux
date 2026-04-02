@@ -44,7 +44,6 @@ export default function EdlForm() {
         ]
     });
 
-    const sigPad = useRef<any>(null);
     const sigBailleur = useRef<any>(null);
     const sigLocataire = useRef<any>(null);
 
@@ -118,17 +117,24 @@ export default function EdlForm() {
         }
     };
 
-    // 4. GESTIONNAIRE DE SAUVEGARDE DU RAPPORT
-    const saveRapport = async () => {
+    //  Gestion de modification des compteurs
+    const updateCompteur = (index: number, value: string) => {
+      const newCompteurs = [...formData.compteurs]; // On copie le tableau
+      newCompteurs[index].index = value; // On modifie juste celui qu'on veut
+      setFormData({ ...formData, compteurs: newCompteurs }); // On renvoie le tableau complet
+    };
+
+    // 5. GESTIONNAIRE DE SAUVEGARDE DU RAPPORT
+    const saveRapport = async (updatedData: any) => {
       const { data, error } = await supabase
         .from('rapports')
         .insert([
           { 
-            data: formData, // On envoie tout l'objet JSON d'un coup !
-            client_email: formData.metadata.locataire.email,
-            bailleur_email: formData.metadata.bailleur.email,
-            adresse_bien: formData.metadata.adresse_bien,
-            type_edl: formData.metadata.type,
+            data: updatedData, // On utilise l'objet qu'on vient de recevoir !
+            client_email: updatedData.metadata.locataire.email,
+            bailleur_email: updatedData.metadata.bailleur.email,
+            adresse_bien: updatedData.metadata.adresse_bien,
+            type_edl: updatedData.metadata.type,
             is_paid: false 
           }
         ])
@@ -144,8 +150,28 @@ export default function EdlForm() {
       }
     };
 
-    // Crée une petite variable de validation pour y voir clair
+    // Crée une petite variable de validation pour Step 1
     const isStep1Valid = () => {
+      const m = formData.metadata;
+      const basicInfo = 
+      m.adresse_bien.length > 5 && 
+      m.bailleur.nom.length > 2 &&
+      m.bailleur.email.includes('@') && 
+      m.locataire.nom.length > 2 &&
+      m.locataire.email.includes('@') &&
+      m.cles && 
+      m.chauffage;
+      
+      // Si c'est Jeanbrun, le cadastre est obligatoire. Sinon, non.
+      if (m.isJeanbrun) {
+        return basicInfo && m.cadastre.length > 0;
+      }
+
+      return basicInfo;
+    };
+
+      // Crée une petite variable de validation pour Step 2
+    const isStep2Valid = () => {
       const m = formData.metadata;
       const basicInfo = 
       m.adresse_bien.length > 5 && 
@@ -237,11 +263,13 @@ export default function EdlForm() {
                 <input 
                   type="text" placeholder="Nom complet / Raison sociale"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                  value={formData.metadata.bailleur.nom}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, nom: e.target.value}}})}
                 />
                 <input 
                   type="email" placeholder="Email du Bailleur"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                  value={formData.metadata.bailleur.email}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, email: e.target.value}}})}
                 />
               </div>
@@ -254,11 +282,13 @@ export default function EdlForm() {
                 <input 
                   type="text" placeholder="Nom et Prénom"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                  value={formData.metadata.locataire.nom}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, nom: e.target.value}}})}
                 />
                 <input 
                   type="email" placeholder="Email du Locataire"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                  value={formData.metadata.locataire.email}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, email: e.target.value}}})}
                 />
               </div>
@@ -282,10 +312,12 @@ export default function EdlForm() {
                 <input 
                   type="number" placeholder="Nb de clés" 
                   className="p-3 rounded-xl border border-white bg-white shadow-sm"
+                  value={formData.metadata.cles}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cles: e.target.value}})}
                 />
                 <select 
                   className="p-3 rounded-xl border border-white bg-white shadow-sm"
+                  value={formData.metadata.chauffage}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, chauffage: e.target.value}})}
                 >
                   <option value="">Chauffage...</option>
@@ -300,6 +332,7 @@ export default function EdlForm() {
                 type="text" 
                 placeholder={formData.metadata.isJeanbrun ? "Réf. Cadastrale (OBLIGATOIRE)" : "Réf. Cadastrale (Optionnel)"}
                 className={`w-full p-3 rounded-xl border ${formData.metadata.isJeanbrun ? 'border-orange-300 bg-orange-50' : 'border-white bg-white'}`}
+                value={formData.metadata.cadastre}
                 onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cadastre: e.target.value}})}
               />
             </div>
@@ -322,47 +355,102 @@ export default function EdlForm() {
               Relevé des Compteurs
             </h2>
 
-            {/* Compteur Élec */}
+            {/* --- COMPTEUR ÉLEC --- */}
             <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="bg-blue-50 p-2 rounded-full">💡</div>
-                <p className="text-sm font-bold text-slate-900">Électricité</p>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-4">
+                  <div className="bg-blue-50 p-2 rounded-full text-xl">💡</div>
+                  <p className="text-sm font-bold text-slate-900">Électricité</p>
+                </div>
+                {!formData.compteurs[0].index && <span className="text-[10px] text-red-500 font-bold uppercase">Requis</span>}
               </div>
+              
               <div className="flex gap-2">
                 <input 
                   type="number" placeholder="Index kWh" 
-                  className="flex-1 p-3 rounded-lg border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  value={formData.compteurs[0].index}
+                  onChange={(e) => {
+                    const newCompteurs = [...formData.compteurs];
+                    newCompteurs[0].index = e.target.value;
+                    setFormData({...formData, compteurs: newCompteurs});
+                  }}
                 />
-                <label className={`p-3 rounded-lg cursor-pointer transition flex items-center gap-2 ${elecPhoto ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
-                   {elecPhoto ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                   <input type="file" className="hidden" onChange={handlePhotoElec} accept="image/*" />
+                <label title="Vous pouvez prendre une photo du compteur d'éléctricité comme preuve irréfutable" 
+                className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[0].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
+                  {formData.compteurs[0].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
+                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const url = await uploadToSupabase(file, "compteurs");
+                      const newCompteurs = [...formData.compteurs];
+                      newCompteurs[0].photo_url = url;
+                      setFormData({...formData, compteurs: newCompteurs});
+                    }
+                  }} />
                 </label>
               </div>
-              {elecPhoto && <img src={elecPhoto} className="mt-3 w-full h-32 object-cover rounded-lg border border-slate-200" alt="Preview Elec" />}
+
+              {/* Preview Élec */}
+              {formData.compteurs[0].photo_url && (
+                <img src={formData.compteurs[0].photo_url} className="mt-3 w-full h-32 object-cover rounded-xl border border-slate-100 animate-in zoom-in-95" alt="Preview Elec" />
+              )}
             </div>
 
-            {/* Compteur Eau */}
+            {/* --- COMPTEUR EAU --- */}
             <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="bg-cyan-50 p-2 rounded-full">💧</div>
-                <p className="text-sm font-bold text-slate-900">Eau Froide</p>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-4">
+                  <div className="bg-cyan-50 p-2 rounded-full text-xl">💧</div>
+                  <p className="text-sm font-bold text-slate-900">Eau Froide</p>
+                </div>
+                {!formData.compteurs[1].index && <span className="text-[10px] text-red-500 font-bold uppercase">Requis</span>}
               </div>
+
               <div className="flex gap-2">
                 <input 
                   type="number" placeholder="Index m³" 
-                  className="flex-1 p-3 rounded-lg border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  value={formData.compteurs[1].index}
+                  onChange={(e) => {
+                    const newCompteurs = [...formData.compteurs];
+                    newCompteurs[1].index = e.target.value;
+                    setFormData({...formData, compteurs: newCompteurs});
+                  }}
                 />
-                <label className={`p-3 rounded-lg cursor-pointer transition flex items-center gap-2 ${eauPhoto ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
-                   {eauPhoto ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                   <input type="file" className="hidden" onChange={handlePhotoEau} accept="image/*" />
+                <label title="Vous pouvez prendre une photo du compteur d'eau comme preuve irréfutable" 
+                className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[1].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
+                  {formData.compteurs[1].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
+                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const url = await uploadToSupabase(file, "compteurs");
+                      const newCompteurs = [...formData.compteurs];
+                      newCompteurs[1].photo_url = url;
+                      setFormData({...formData, compteurs: newCompteurs});
+                    }
+                  }} />
                 </label>
               </div>
-              {eauPhoto && <img src={eauPhoto} className="mt-3 w-full h-32 object-cover rounded-lg border border-slate-200" alt="Preview Eau" />}
+
+              {/* Preview Eau */}
+              {formData.compteurs[1].photo_url && (
+                <img src={formData.compteurs[1].photo_url} className="mt-3 w-full h-32 object-cover rounded-xl border border-slate-100 animate-in zoom-in-95" alt="Preview Eau" />
+              )}
             </div>
 
+            {/* Navigation */}
             <div className="flex gap-4 pt-6">
-              <button onClick={() => setStep(1)} className="flex-1 py-3 text-slate-600 font-medium">Retour</button>
-              <button onClick={() => setStep(3)} className="flex-[2] bg-blue-600 text-white py-3 rounded-xl font-bold">Suivant</button>
+              <button onClick={() => setStep(1)} className="flex-1 py-4 text-slate-500 font-medium hover:bg-slate-50 rounded-xl transition">
+                Retour
+              </button>
+              <button 
+                onClick={() => setStep(3)} 
+                disabled={!formData.compteurs[0].index || !formData.compteurs[1].index}
+                className="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition disabled:bg-slate-200 disabled:shadow-none"
+              >
+                Continuer
+              </button>
             </div>
           </div>
         )}
@@ -545,15 +633,24 @@ export default function EdlForm() {
                       return;
                     }
                     
-                    setFormData({
-                      ...formData,
-                      signatureBailleur: sigBailleur.current.getTrimmedCanvas().toDataURL('image/png'),
-                      signatureLocataire: sigLocataire.current.getTrimmedCanvas().toDataURL('image/png')
-                    });
+                    // 1. On capture les signatures à l'instant T
+                    const signB = sigBailleur.current.getTrimmedCanvas().toDataURL('image/png');
+                    const signL = sigLocataire.current.getTrimmedCanvas().toDataURL('image/png');
 
-                    // Ici on lancera la génération PDF + Nettoyage
-                    saveRapport();
+                    // 2. On crée l'objet final complet
+                    const finalData = {
+                      ...formData,
+                      signatureBailleur: signB,
+                      signatureLocataire: signL
+                    };
+
+                    // 3. On met à jour le state (pour l'affichage) 
+                    setFormData(finalData);
+
+                    // 4. On ENVOIE cet objet précis à la fonction de sauvegarde
+                    saveRapport(finalData); 
                   }}
+
                   className="w-full bg-green-600 text-white py-4 rounded-2xl font-extrabold shadow-lg hover:bg-green-700 transition"
                 >
                   Clôturer l'État des Lieux
