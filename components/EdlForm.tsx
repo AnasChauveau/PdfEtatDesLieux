@@ -18,6 +18,7 @@ export default function EdlForm() {
         type: "Entrée",
         date: new Date().toISOString().split('T')[0],
         adresse_bien: "",
+        isJeanbrun: false,
         cles: "", 
         chauffage: "", 
         cadastre: "",
@@ -125,6 +126,7 @@ export default function EdlForm() {
           { 
             data: formData, // On envoie tout l'objet JSON d'un coup !
             client_email: formData.metadata.locataire.email,
+            bailleur_email: formData.metadata.bailleur.email,
             adresse_bien: formData.metadata.adresse_bien,
             type_edl: formData.metadata.type,
             is_paid: false 
@@ -143,12 +145,24 @@ export default function EdlForm() {
     };
 
     // Crée une petite variable de validation pour y voir clair
-    const isStep1Valid = 
-    formData.metadata.adresse_bien.length > 5 && 
-    formData.metadata.bailleur.nom.length > 2 &&
-    formData.metadata.bailleur.email.includes('@') && 
-    formData.metadata.locataire.nom.length > 2 &&
-    formData.metadata.locataire.email.includes('@');
+    const isStep1Valid = () => {
+      const m = formData.metadata;
+      const basicInfo = 
+      m.adresse_bien.length > 5 && 
+      m.bailleur.nom.length > 2 &&
+      m.bailleur.email.includes('@') && 
+      m.locataire.nom.length > 2 &&
+      m.locataire.email.includes('@') &&
+      m.cles && 
+      m.chauffage;
+      
+      // Si c'est Jeanbrun, le cadastre est obligatoire. Sinon, non.
+      if (m.isJeanbrun) {
+        return basicInfo && m.cadastre.length > 0;
+      }
+
+      return basicInfo;
+    };
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
@@ -165,7 +179,9 @@ export default function EdlForm() {
       <div className="p-6">
         {/* ÉTAPE 1 : INFOS LOGEMENT */}
         {step === 1 && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div>
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-1">
                 <MapPin className="text-blue-600" size={24} />
@@ -248,44 +264,52 @@ export default function EdlForm() {
               </div>
             </div>
 
-            {/* À ajouter dans l'étape 1 ou 2 */}
-            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 space-y-4">
-              <h3 className="text-sm font-bold text-orange-800 uppercase flex items-center gap-2">
-                <Key size={16} /> Éléments de sécurité & Chauffage
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-700">Dispositif Jeanbrun 2026 ?</label>
                 <input 
-                  type="text" placeholder="Nombre de jeux de clés"
-                  className="p-3 rounded-xl border border-slate-200 text-sm"
+                  type="checkbox" 
+                  className="w-6 h-6 accent-blue-600"
+                  checked={formData.metadata.isJeanbrun}
+                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, isJeanbrun: e.target.checked}})}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <input 
+                  type="number" placeholder="Nb de clés" 
+                  className="p-3 rounded-xl border border-white bg-white shadow-sm"
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cles: e.target.value}})}
                 />
                 <select 
-                  className="p-3 rounded-xl border border-slate-200 text-sm bg-white"
+                  className="p-3 rounded-xl border border-white bg-white shadow-sm"
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, chauffage: e.target.value}})}
                 >
-                  <option>Type de chauffage...</option>
-                  <option>Individuel Électrique</option>
+                  <option value="">Chauffage...</option>
+                  <option>Individuel Élec</option>
                   <option>Individuel Gaz</option>
                   <option>Collectif</option>
-                  <option>Pompe à chaleur</option>
                 </select>
               </div>
-              
+
+              {/* Cadastre obligatoire SEULEMENT si Jeanbrun coché */}
               <input 
-                type="text" placeholder="Référence Cadastrale (Obligatoire Jeanbrun)"
-                className="w-full p-3 rounded-xl border border-slate-200 text-sm"
+                type="text" 
+                placeholder={formData.metadata.isJeanbrun ? "Réf. Cadastrale (OBLIGATOIRE)" : "Réf. Cadastrale (Optionnel)"}
+                className={`w-full p-3 rounded-xl border ${formData.metadata.isJeanbrun ? 'border-orange-300 bg-orange-50' : 'border-white bg-white'}`}
                 onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cadastre: e.target.value}})}
               />
             </div>
 
             <button 
               onClick={() => setStep(2)}
-              disabled={!isStep1Valid}
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-extrabold flex items-center justify-center gap-2 hover:bg-blue-700 transition shadow-lg shadow-blue-100 disabled:bg-slate-200 disabled:shadow-none disabled:cursor-not-allowed"
+              disabled={!isStep1Valid()} // On utilise notre nouvelle fonction
+              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:bg-slate-200"
             >
-              Commencer le relevé
-              <ArrowRight size={20} />
+              Étape suivante
             </button>
           </div>
         )}
@@ -489,61 +513,51 @@ export default function EdlForm() {
             </div>
             )}
             {step === 4 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-                <div className="text-center">
-                  <h2 className="text-xl font-bold text-slate-800">Signature Digitale</h2>
-                  <p className="text-sm text-slate-500">Signez à l'intérieur du cadre ci-dessous</p>
+              <div className="space-y-8 animate-in fade-in">
+                <h2 className="text-xl font-bold text-slate-800 text-center">Signatures Contradictoires</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Signature Bailleur */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-400">Signature du Bailleur</label>
+                    <div className="border-2 border-slate-200 rounded-xl bg-white overflow-hidden">
+                      <SignatureCanvas ref={sigBailleur} canvasProps={{className: "signature-pad-canvas w-full h-48"}} />
+                    </div>
+                    <button onClick={() => sigBailleur.current.clear()} className="text-[10px] text-slate-400 uppercase">Effacer</button>
+                  </div>
+
+                  {/* Signature Locataire */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-slate-400">Signature du Locataire</label>
+                    <div className="border-2 border-slate-200 rounded-xl bg-white overflow-hidden">
+                      <SignatureCanvas ref={sigLocataire} canvasProps={{className: "signature-pad-canvas w-full h-48"}} />
+                    </div>
+                    <button onClick={() => sigLocataire.current.clear()} className="text-[10px] text-slate-400 uppercase">Effacer</button>
+                  </div>
                 </div>
 
-                {/* Le Cadre de Signature */}
-                <div className="border-2 border-slate-200 rounded-2xl bg-white overflow-hidden shadow-inner">
-                  <SignatureCanvas 
-                    ref={sigPad}
-                    penColor='black'
-                    canvasProps={{
-                      className: "signature-pad-canvas w-full h-64 bg-white"
-                    }}
-                  />
-                </div>
+                <button onClick={() => setStep(3)} className="w-full bg-red-600 text-white py-4 rounded-2xl font-extrabold shadow-lg hover:bg-red-700 transition">Retour</button>
 
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => sigPad.current.clear()}
-                    className="flex-1 py-2 text-xs font-bold text-slate-400 uppercase hover:text-red-500 transition"
-                  >
-                    Effacer la signature
-                  </button>
-                </div>
+                <button 
+                  onClick={async () => {
+                    if (sigBailleur.current.isEmpty() || sigLocataire.current.isEmpty()) {
+                      alert("Les deux parties doivent signer.");
+                      return;
+                    }
+                    
+                    setFormData({
+                      ...formData,
+                      signatureBailleur: sigBailleur.current.getTrimmedCanvas().toDataURL('image/png'),
+                      signatureLocataire: sigLocataire.current.getTrimmedCanvas().toDataURL('image/png')
+                    });
 
-                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                  <p className="text-[10px] text-blue-800 leading-relaxed text-center">
-                    En signant, les parties valident l'état du logement à la date du {formData.metadata.date}. 
-                    Ce document sera archivé conformément au dispositif Jeanbrun 2026.
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-3 pt-4">
-                  <button 
-                    onClick={async () => {
-                      if (sigPad.current.isEmpty()) {
-                        alert("Veuillez signer avant de valider.");
-                        return;
-                      }
-                      // On transforme le dessin en image (base64)
-                      const signatureData = sigPad.current.getTrimmedCanvas().toDataURL('image/png');
-                      
-                      // On peut soit l'envoyer à Supabase, soit la mettre direct dans le JSON
-                      setFormData({...formData, signature: signatureData} as any);
-                      
-                      // Lancer l'enregistrement final
-                      saveRapport();
-                    }}
-                    className="w-full bg-slate-900 text-white py-4 rounded-2xl font-extrabold shadow-lg hover:bg-black transition"
-                  >
-                    Valider et Générer le PDF
-                  </button>
-                  <button onClick={() => setStep(3)} className="text-slate-400 text-sm font-medium">Retour</button>
-                </div>
+                    // Ici on lancera la génération PDF + Nettoyage
+                    saveRapport();
+                  }}
+                  className="w-full bg-green-600 text-white py-4 rounded-2xl font-extrabold shadow-lg hover:bg-green-700 transition"
+                >
+                  Clôturer l'État des Lieux
+                </button>
               </div>
             )}
 
