@@ -12,8 +12,9 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Force l'affichage d'une petite croix pour viser précisément lors de la signature */
 .signature-pad-canvas {
-  cursor: crosshair !important;
-  touch-action: none; /* Empêche la page de défiler pendant qu'on signe sur mobile */
+  /* On force un curseur standard noir pour éviter l'inversion de couleur du crosshair */
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="black"><circle cx="12" cy="12" r="3"/></svg>') 10 10, auto !important;
+  background-color: #ffffff !important;
+  touch-action: none;
 }

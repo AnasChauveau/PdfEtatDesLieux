@@ -18,6 +18,9 @@ export default function EdlForm() {
         type: "Entrée",
         date: new Date().toISOString().split('T')[0],
         adresse_bien: "",
+        cles: "", 
+        chauffage: "", 
+        cadastre: "",
         bailleur: { nom: "", adresse: "", email: "" },
         locataire: { nom: "", email: "" },
         mandataire: { nom: "", entreprise: "" } // Optionnel pour les agences
@@ -26,7 +29,9 @@ export default function EdlForm() {
         { type: "Électricité", index: "", photo_url: "" },
         { type: "Eau Froide", index: "", photo_url: "" }
       ],
-      pieces: []
+      pieces: [],
+      signatureBailleur: "",
+      signatureLocataire: ""
     });
 
     const [currentRoom, setCurrentRoom] = useState({
