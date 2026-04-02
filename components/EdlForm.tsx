@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { User, MapPin, Calendar, ArrowRight, Camera, CheckCircle2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import imageCompression from 'browser-image-compression';
 
 export default function EdlForm() {
     const [step, setStep] = useState(1);
@@ -328,36 +329,57 @@ export default function EdlForm() {
                     
                     <div className="p-4 space-y-6">
                         {piece.elements.map((el: any, eIndex: number) => (
-                        <div key={eIndex} className="space-y-3 pb-4 border-b border-slate-100 last:border-0">
-                            <p className="font-semibold text-slate-700">{el.nom}</p>
-                            <div className="grid grid-cols-2 gap-3">
-                            <select 
-                                className="p-2 rounded-lg border border-slate-300 bg-white text-sm"
+                          <div key={eIndex} className="py-4 border-b border-slate-50 last:border-0">
+                            <div className="flex justify-between items-center mb-2">
+                              <p className="font-bold text-slate-700 text-sm">{el.nom}</p>
+                              
+                              {/* Bouton Photo de dégradation - Apparaît si l'état est moyen ou mauvais */}
+                              {el.etat !== "Très bon état" && (
+                                <label className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition ${el.photo_url ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                  <Camera size={12} />
+                                  {el.photo_url ? "Photo Preuve OK" : "Ajouter preuve"}
+                                  <input 
+                                    type="file" className="hidden" accept="image/*" 
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const url = await uploadToSupabase(file, "degats");
+                                      const newPieces = [...formData.pieces];
+                                      newPieces[pIndex].elements[eIndex].photo_url = url;
+                                      setFormData({...formData, pieces: newPieces});
+                                    }} 
+                                  />
+                                </label>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <select 
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-xs"
                                 value={el.etat}
                                 onChange={(e) => {
-                                const newPieces = [...formData.pieces];
-                                newPieces[pIndex].elements[eIndex].etat = e.target.value;
-                                setFormData({...formData, pieces: newPieces});
+                                  const newPieces = [...formData.pieces];
+                                  newPieces[pIndex].elements[eIndex].etat = e.target.value;
+                                  setFormData({...formData, pieces: newPieces});
                                 }}
-                            >
+                              >
                                 <option>Très bon état</option>
                                 <option>Bon état</option>
                                 <option>État d'usage</option>
                                 <option>Mauvais état</option>
-                            </select>
-                            <input
-                                type="text" 
-                                placeholder="Observations..."
-                                className="p-2 rounded-lg border border-slate-300 bg-slate-50 text-sm"
+                              </select>
+                              <input 
+                                type="text" placeholder="Note (ex: tache, rayure...)"
+                                className="p-2 rounded-lg border border-slate-200 bg-slate-50 text-xs"
                                 value={el.observations}
                                 onChange={(e) => {
-                                const newPieces = [...formData.pieces];
-                                newPieces[pIndex].elements[eIndex].observations = e.target.value;
-                                setFormData({...formData, pieces: newPieces});
+                                  const newPieces = [...formData.pieces];
+                                  newPieces[pIndex].elements[eIndex].observations = e.target.value;
+                                  setFormData({...formData, pieces: newPieces});
                                 }}
-                            />
+                              />
                             </div>
-                        </div>
+                          </div>
                         ))}
                     </div>
                     </div>
