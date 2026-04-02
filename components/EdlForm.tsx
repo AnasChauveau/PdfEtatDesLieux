@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { User, MapPin, Calendar, ArrowRight, Camera, CheckCircle2 } from "lucide-react";
+import { User, MapPin, Calendar, ArrowRight, Camera, CheckCircle2, Key } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
@@ -44,6 +44,8 @@ export default function EdlForm() {
     });
 
     const sigPad = useRef<any>(null);
+    const sigBailleur = useRef<any>(null);
+    const sigLocataire = useRef<any>(null);
 
     // 1. FONCTION UNIVERSELLE D'UPLOAD (Côté Supabase)
     const uploadToSupabase = async (file: File, folder: string) => {
@@ -244,6 +246,37 @@ export default function EdlForm() {
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, email: e.target.value}}})}
                 />
               </div>
+            </div>
+
+            {/* À ajouter dans l'étape 1 ou 2 */}
+            <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 space-y-4">
+              <h3 className="text-sm font-bold text-orange-800 uppercase flex items-center gap-2">
+                <Key size={16} /> Éléments de sécurité & Chauffage
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input 
+                  type="text" placeholder="Nombre de jeux de clés"
+                  className="p-3 rounded-xl border border-slate-200 text-sm"
+                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cles: e.target.value}})}
+                />
+                <select 
+                  className="p-3 rounded-xl border border-slate-200 text-sm bg-white"
+                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, chauffage: e.target.value}})}
+                >
+                  <option>Type de chauffage...</option>
+                  <option>Individuel Électrique</option>
+                  <option>Individuel Gaz</option>
+                  <option>Collectif</option>
+                  <option>Pompe à chaleur</option>
+                </select>
+              </div>
+              
+              <input 
+                type="text" placeholder="Référence Cadastrale (Obligatoire Jeanbrun)"
+                className="w-full p-3 rounded-xl border border-slate-200 text-sm"
+                onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cadastre: e.target.value}})}
+              />
             </div>
 
             <button 
