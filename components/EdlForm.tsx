@@ -39,21 +39,37 @@ export default function EdlForm() {
 
     // 1. FONCTION UNIVERSELLE D'UPLOAD (Côté Supabase)
     const uploadToSupabase = async (file: File, folder: string) => {
+      // A. Options de compression
+      const options = {
+        maxSizeMB: 0.2,          // Max 200 Ko
+        maxWidthOrHeight: 1280, // Résolution largement suffisante pour du PDF
+        useWebWorker: true
+      };
+
+      try {
+        // B. Compression
+        const compressedFile = await imageCompression(file, options);
+        
+        // C. Upload du fichier compressé
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
         const filePath = `${folder}/${fileName}`;
 
         const { error } = await supabase.storage
-        .from('photos-etats-des-lieux')
-        .upload(filePath, file);
+          .from('photos-etats-des-lieux')
+          .upload(filePath, compressedFile);
 
         if (error) throw error;
 
         const { data: { publicUrl } } = supabase.storage
-        .from('photos-etats-des-lieux')
-        .getPublicUrl(filePath);
+          .from('photos-etats-des-lieux')
+          .getPublicUrl(filePath);
 
         return publicUrl;
+      } catch (error) {
+        console.error("Erreur compression/upload:", error);
+        return null;
+      }
     };
 
     // 2. GESTIONNAIRE PHOTO ÉLECTRICITÉ
