@@ -5,6 +5,7 @@ import { User, MapPin, Calendar, ArrowRight, Camera, CheckCircle2, Key } from "l
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
+import { generateEDL_PDF } from '@/lib/pdfGenerator';
 
 export default function EdlForm() {
     const [step, setStep] = useState(1);
@@ -47,6 +48,48 @@ export default function EdlForm() {
     const sigBailleur = useRef<any>(null);
     const sigLocataire = useRef<any>(null);
 
+    // // 2. GESTIONNAIRE PHOTO ÉLECTRICITÉ
+    // const handlePhotoElec = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    //     const file = e.target.files?.[0];
+    //     if (!file) return;
+
+    //     try {
+    //     const url = await uploadToSupabase(file, "compteurs");
+    //     setElecPhoto(url); // Pour l'affichage immédiat
+    //     // Mise à jour du gros JSON
+    //     setFormData(prev => ({
+    //         ...prev,
+    //         compteurs: prev.compteurs.map(c => c.type === "Électricité" ? { ...c, photo_url: url } : c)
+    //     }));
+    //     } catch (err) {
+    //     alert("Erreur upload électricité");
+    //     }
+    // };
+
+    // // 3. GESTIONNAIRE PHOTO EAU
+    // const handlePhotoEau = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    //     const file = e.target.files?.[0];
+    //     if (!file) return;
+
+    //     try {
+    //     const url = await uploadToSupabase(file, "compteurs");
+    //     setEauPhoto(url); // Pour l'affichage immédiat
+    //     setFormData(prev => ({
+    //         ...prev,
+    //         compteurs: prev.compteurs.map(c => c.type === "Eau Froide" ? { ...c, photo_url: url } : c)
+    //     }));
+    //     } catch (err) {
+    //     alert("Erreur upload eau");
+    //     }
+    // };
+
+    // // 4. Gestion de modification des compteurs
+    // const updateCompteur = (index: number, value: string) => {
+    //   const newCompteurs = [...formData.compteurs]; // On copie le tableau
+    //   newCompteurs[index].index = value; // On modifie juste celui qu'on veut
+    //   setFormData({ ...formData, compteurs: newCompteurs }); // On renvoie le tableau complet
+    // };
+
     // 1. FONCTION UNIVERSELLE D'UPLOAD (Côté Supabase)
     const uploadToSupabase = async (file: File, folder: string) => {
       // A. Options de compression
@@ -82,71 +125,88 @@ export default function EdlForm() {
       }
     };
 
-    // 2. GESTIONNAIRE PHOTO ÉLECTRICITÉ
-    const handlePhotoElec = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    // 2. GESTIONNAIRE DU NETTOYAGE ET DE LA SUPPRESSION DU SUPERFLU
+    const cleanupPhotos = async (data: any) => {
+      try {
+        const photosToDelete: string[] = [];
 
-        try {
-        const url = await uploadToSupabase(file, "compteurs");
-        setElecPhoto(url); // Pour l'affichage immédiat
-        // Mise à jour du gros JSON
-        setFormData(prev => ({
-            ...prev,
-            compteurs: prev.compteurs.map(c => c.type === "Électricité" ? { ...c, photo_url: url } : c)
-        }));
-        } catch (err) {
-        alert("Erreur upload électricité");
+        // 1. On scanne les compteurs
+        data.compteurs.forEach((c: any) => {
+          if (c.photo_url) photosToDelete.push(c.photo_url);
+        });
+
+        // 2. On scanne les pièces et les dégradations
+        data.pieces.forEach((p: any) => {
+          if (p.photo_url) photosToDelete.push(p.photo_url);
+          p.elements.forEach((el: any) => {
+            if (el.photo_url) photosToDelete.push(el.photo_url);
+          });
+        });
+
+        if (photosToDelete.length > 0) {
+          // On extrait le chemin relatif (tout ce qui est après le nom du bucket)
+          const paths = photosToDelete.map(url => {
+            const parts = url.split('photos-etats-des-lieux/');
+            return parts[1]; // Récupère juste "compteurs/image.jpg"
+          }).filter(path => path !== undefined);
+
+          await supabase.storage.from('photos-etats-des-lieux').remove(paths);
+          console.log("🧹 Nettoyage terminé :", paths.length, "fichiers supprimés.");
         }
+      } catch (err) {
+        console.error("Erreur lors du nettoyage :", err);
+      }
     };
 
-    // 3. GESTIONNAIRE PHOTO EAU
-    const handlePhotoEau = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        try {
-        const url = await uploadToSupabase(file, "compteurs");
-        setEauPhoto(url); // Pour l'affichage immédiat
-        setFormData(prev => ({
-            ...prev,
-            compteurs: prev.compteurs.map(c => c.type === "Eau Froide" ? { ...c, photo_url: url } : c)
-        }));
-        } catch (err) {
-        alert("Erreur upload eau");
-        }
-    };
-
-    //  Gestion de modification des compteurs
-    const updateCompteur = (index: number, value: string) => {
-      const newCompteurs = [...formData.compteurs]; // On copie le tableau
-      newCompteurs[index].index = value; // On modifie juste celui qu'on veut
-      setFormData({ ...formData, compteurs: newCompteurs }); // On renvoie le tableau complet
-    };
-
-    // 5. GESTIONNAIRE DE SAUVEGARDE DU RAPPORT
+    // 3. GESTIONNAIRE DE SAUVEGARDE DU RAPPORT
     const saveRapport = async (updatedData: any) => {
-      const { data, error } = await supabase
-        .from('rapports')
-        .insert([
-          { 
-            data: updatedData, // On utilise l'objet qu'on vient de recevoir !
-            client_email: updatedData.metadata.locataire.email,
-            bailleur_email: updatedData.metadata.bailleur.email,
-            adresse_bien: updatedData.metadata.adresse_bien,
-            type_edl: updatedData.metadata.type,
-            is_paid: false 
-          }
-        ])
-        .select();
+      try {
+        // 0. (Optionnel) : Afficher un loader pour faire patienter
+        console.log("Génération du PDF en cours...");
 
-      if (error) {
-        console.error("Erreur enregistrement:", error);
-        alert("Erreur lors de la sauvegarde.");
-      } else {
-        alert("Félicitations ! État des lieux enregistré avec succès.");
-        console.log("Rapport créé:", data);
-        setStep(5); // Étape de succès
+        // 1. GÉNÉRER LE PDF
+        const pdfBlob = await generateEDL_PDF(updatedData);
+
+        // 2. UPLOADER LE PDF SUR SUPABASE
+        const fileName = `rapport_${Date.now()}.pdf`;
+        const { data: storageData, error: storageError } = await supabase.storage
+          .from('rapports-finaux') // Assure-toi d'avoir créé ce bucket !
+          .upload(fileName, pdfBlob, {
+            contentType: 'application/pdf',
+            upsert: true
+          });
+
+        if (storageError) throw new Error("Erreur Storage: " + storageError.message);
+
+        // 3. ENREGISTRER EN BDD
+        const { data, error: dbError } = await supabase
+          .from('rapports')
+          .insert([
+            { 
+              data: updatedData,
+              client_email: updatedData.metadata.locataire.email,
+              bailleur_email: updatedData.metadata.bailleur.email,
+              adresse_bien: updatedData.metadata.adresse_bien,
+              type_edl: updatedData.metadata.type,
+              pdf_url: fileName, // On stocke le nom du fichier PDF
+              is_paid: false 
+            }
+          ])
+          .select();
+
+        if (dbError) throw new Error("Erreur BDD: " + dbError.message);
+
+        // 4. NETTOYAGE DES PHOTOS (Zéro Déchet)
+        // On le fait seulement si tout ce qui précède a réussi
+        await cleanupPhotos(updatedData);
+
+        // 5. TERMINER
+        console.log("Rapport créé avec succès !");
+        setStep(5); 
+
+      } catch (error: any) {
+        console.error("Échec du processus :", error);
+        alert("Désolé, une erreur est survenue : " + error.message);
       }
     };
 
