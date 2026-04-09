@@ -283,7 +283,7 @@ export default function EdlForm() {
     <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
       {/* Progress Bar */}
       <div className="bg-slate-50 border-b border-slate-100 p-4 flex justify-between items-center">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Étape {step} sur 4</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Étape {step} sur 5</span>
         <div className="flex gap-1">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className={`h-1.5 w-8 rounded-full ${step >= i ? 'bg-blue-600' : 'bg-slate-200'}`} />
