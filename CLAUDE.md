@@ -111,6 +111,8 @@ Ajouter un champ `status` (enum) avec les transitions suivantes :
 
 ```
 draft
+  → payment_pending   ← Stripe Checkout initié
+  → paid              ← webhook Stripe payment_intent.succeeded → déclenche génération PDF
   → pdf_generated
   → zip_created
   → email_sent
@@ -124,6 +126,25 @@ et on NE PURGE PAS.
 
 Table dédiée `email_events` pour logger tous les webhooks Resend (assurance-vie
 juridique en cas de litige).
+
+### 6. Modèle économique : paiement à l'acte via Stripe
+
+**Principe** : paiement AVANT génération du PDF. Pas d'abonnement, pas de pay-after.
+Le statut `paid` (déclenché par le webhook Stripe `payment_intent.succeeded`) est le
+seul déclencheur autorisé de la transition `paid → pdf_generated`.
+
+**Pricing cible** : 9–19 € par EDL pour bailleurs particuliers. Packs de crédits
+envisagés pour les agences (volume).
+
+Flux Stripe :
+1. Formulaire complété → INSERT `status='draft'`
+2. Redirect vers Stripe Checkout
+3. Webhook Stripe `payment_intent.succeeded` → UPDATE `status='paid'`
+4. Génération PDF déclenchée → `status='pdf_generated'`
+
+Un rapport resté en `payment_pending` depuis plus de 1 h peut être considéré abandonné
+(paiement échoué ou annulé) — le cron quotidien (voir roadmap) le purgera avec les
+drafts expirés.
 
 ### 4. Structure de données extensible : `elements[]` générique
 
@@ -287,7 +308,7 @@ Cron Supabase quotidien qui purge tout ce qui dépasse (RGPD-propre by design).
 
 Ordre d'implémentation recommandé :
 
-1. **Machine à états `status`** dans la table `rapports` (0.5 j) — socle de tout
+1. ~~**Machine à états `status`**~~ ✅ FAIT — machine à états + écran de confirmation manuelle
 2. **Migration `jsPDF` → `pdf-lib`** (0.5-1 j) — à faire avant d'ajouter des features PDF
 3. **ZIP + Resend + webhook de confirmation** (1 j) — objectif initial, safe grâce au #1
 4. **Refonte PDF** : mentions légales + hash + annexe photos numérotées (1 j)
@@ -296,9 +317,21 @@ Ordre d'implémentation recommandé :
 7. **Mode brouillon localStorage** (0.5 j) — discret mais critique
 8. **Ajout pièces WC, parking, cave, balcon** (2 h chacune grâce aux templates)
 9. **Badge "Conforme Loi Alur"** (2 h)
+10. **Intégration Stripe Checkout** (1 j) — statuts `payment_pending` et `paid` ; le webhook
+    `payment_intent.succeeded` devient le déclencheur de la génération PDF à la place de
+    l'INSERT direct. À faire après la refonte PDF (#4) pour ne pas payer un PDF bancal.
+11. **Cron Supabase quotidien — purge des drafts expirés** (2 h) — supprime les rapports
+    en `status IN ('draft', 'payment_pending')` depuis plus de 24 h ainsi que leurs photos
+    orphelines dans le bucket `photos-etats-des-lieux`. Implémentation : Supabase pg_cron
+    ou Edge Function planifiée.
 
 Post-MVP : import EDL d'entrée externe, intégration DPE, mode meublé avancé,
 eIDAS via Yousign, PWA offline complète.
+
+## ✅ Checklist avant prod
+
+- [ ] **Auditer et durcir toutes les policies RLS** (actuellement permissives en mode anon pour INSERT/UPDATE/DELETE)
+- [ ] **Supprimer les photos orphelines** lors du remplacement d'une photo par l'utilisateur : quand une nouvelle photo est uploadée à la place d'une existante, l'ancienne URL est écrasée dans le state mais le fichier reste dans le bucket `photos-etats-des-lieux`. À corriger avant prod.
 
 ## 🤝 Conventions de travail avec Claude Code
 
