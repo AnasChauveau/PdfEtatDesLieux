@@ -708,8 +708,8 @@ export default function EdlForm() {
                     }
                     
                     // 1. On capture les signatures à l'instant T
-                    const signB = sigBailleur.current.getTrimmedCanvas().toDataURL('image/png');
-                    const signL = sigLocataire.current.getTrimmedCanvas().toDataURL('image/png');
+                    const signB = sigBailleur.current.getCanvas().toDataURL('image/png');
+                    const signL = sigLocataire.current.getCanvas().toDataURL('image/png');
 
                     // 2. On crée l'objet final complet
                     const finalData = {

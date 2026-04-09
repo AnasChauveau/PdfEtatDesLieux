@@ -49,17 +49,17 @@ export const generateEDL_PDF = async (data: any) => {
 
   currentY = (doc as any).lastAutoTable.finalY + 10;
 
-  // --- 2. DÉTAIL DES PIÈCES ---
-  doc.setFontSize(14);
-  doc.text("2. DÉTAIL DES PIÈCES", 14, currentY);
-  currentY += 10;
-
+  // --- DÉTAIL DES PIÈCES (Mise à jour) ---
   data.pieces.forEach((piece: any) => {
     if (currentY > 240) { doc.addPage(); currentY = 20; }
 
+    const titrePiece = piece.photo_url 
+      ? `> ${piece.nom.toUpperCase()} (Vue d'ensemble photographiée)` 
+      : `> ${piece.nom.toUpperCase()}`;
+
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text(`> ${piece.nom}`, 14, currentY);
+    doc.text(titrePiece, 14, currentY);
     currentY += 5;
 
     autoTable(doc, {
@@ -68,7 +68,10 @@ export const generateEDL_PDF = async (data: any) => {
       body: piece.elements.map((el: any) => [
         el.nom, 
         el.etat, 
-        el.observations ? `${el.observations}${el.photo_url ? ' (Photo enregistrée)' : ''}` : 'R.A.S'
+        // Si photo sur l'élément (ex: une dégradation précise)
+        el.photo_url 
+          ? `${el.observations || 'R.A.S'} (Détail photographié)` 
+          : (el.observations || 'R.A.S')
       ]),
       margin: { left: 15 },
       styles: { fontSize: 9 }
