@@ -6,10 +6,14 @@ import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
 import { generateEDL_PDF } from '@/lib/pdfGenerator';
+import type { RapportStatus } from '@/lib/types';
 
 export default function EdlForm() {
     const [step, setStep] = useState(1);
-  
+    const [rapportId, setRapportId] = useState<string | null>(null);
+    // 'idle' = écran succès, 'confirming' = modale ouverte, 'purging' = en cours, 'purged' = terminé
+    const [purgeState, setPurgeState] = useState<'idle' | 'confirming' | 'purging' | 'purged'>('idle');
+
     // États pour stocker les aperçus des photos
     const [elecPhoto, setElecPhoto] = useState<string | null>(null);
     const [eauPhoto, setEauPhoto] = useState<string | null>(null);
@@ -31,7 +35,7 @@ export default function EdlForm() {
         { type: "Électricité", index: "", photo_url: "" },
         { type: "Eau Froide", index: "", photo_url: "" }
       ],
-      pieces: [],
+      pieces: [] as any[],
       signatureBailleur: "",
       signatureLocataire: ""
     });
@@ -125,98 +129,109 @@ export default function EdlForm() {
       }
     };
 
-    // 2. GESTIONNAIRE DU NETTOYAGE ET DE LA SUPPRESSION DU SUPERFLU
-    const cleanupPhotos = async (data: any) => {
+    // 2. NETTOYAGE DES PHOTOS — déclenché uniquement si status = 'email_delivered'
+    const cleanupPhotos = async (id: string, data: any) => {
+      // Garde DB : refuser si le rapport n'est pas en état 'email_delivered'
+      const { data: rapport } = await supabase
+        .from('rapports')
+        .select('status')
+        .eq('id', id)
+        .single();
+
+      if ((rapport?.status as RapportStatus) !== 'email_delivered') {
+        console.warn('cleanupPhotos bloqué — status actuel :', rapport?.status);
+        return;
+      }
+
       try {
         const photosToDelete: string[] = [];
 
-        // Fonction pour extraire le path peu importe où il est dans l'URL
         const extractPath = (url: string) => {
           if (!url) return null;
           const bucketName = 'photos-etats-des-lieux/';
-          if (url.includes(bucketName)) {
-            return url.split(bucketName)[1];
-          }
+          if (url.includes(bucketName)) return url.split(bucketName)[1];
           return null;
         };
 
-        // 1. Compteurs
         data.compteurs.forEach((c: any) => {
-          const p = extractPath(c.photo_url); if(p) photosToDelete.push(p);
+          const p = extractPath(c.photo_url); if (p) photosToDelete.push(p);
         });
 
-        // 2. Pièces et Éléments
         data.pieces.forEach((piece: any) => {
-          // Photo de la pièce entière
-          const pPiece = extractPath(piece.photo_url); if(pPiece) photosToDelete.push(pPiece);
-          
-          // Photos des éléments (dégâts)
+          const pPiece = extractPath(piece.photo_url); if (pPiece) photosToDelete.push(pPiece);
           piece.elements.forEach((el: any) => {
-            const pEl = extractPath(el.photo_url); if(pEl) photosToDelete.push(pEl);
+            const pEl = extractPath(el.photo_url); if (pEl) photosToDelete.push(pEl);
           });
         });
 
         if (photosToDelete.length > 0) {
-          // On retire les doublons éventuels
           const uniquePaths = [...new Set(photosToDelete)];
-          
           const { error } = await supabase.storage
             .from('photos-etats-des-lieux')
             .remove(uniquePaths);
-
           if (error) console.error("Erreur suppression fichiers:", error);
-          else console.log(`🧹 Nettoyage réussi : ${uniquePaths.length} photos supprimées.`);
+          else console.log(`Nettoyage réussi : ${uniquePaths.length} photos supprimées.`);
         }
+
+        // Transition finale : purged
+        await supabase
+          .from('rapports')
+          .update({ status: 'purged' satisfies RapportStatus })
+          .eq('id', id);
+
       } catch (err) {
         console.error("Erreur globale nettoyage:", err);
+        throw err;
       }
     };
 
-    // 3. GESTIONNAIRE DE SAUVEGARDE DU RAPPORT
+    // 3. SAUVEGARDE DU RAPPORT — machine à états : draft → pdf_generated
     const saveRapport = async (updatedData: any) => {
       try {
-        // 0. (Optionnel) : Afficher un loader pour faire patienter
-        console.log("Génération du PDF en cours...");
+        // 1. INSERT brouillon en DB pour obtenir l'ID tôt
+        const { data: insertData, error: insertError } = await supabase
+          .from('rapports')
+          .insert([{
+            data: updatedData,
+            client_email: updatedData.metadata.locataire.email,
+            bailleur_email: updatedData.metadata.bailleur.email,
+            adresse_bien: updatedData.metadata.adresse_bien,
+            type_edl: updatedData.metadata.type,
+            is_paid: false,
+            status: 'draft' satisfies RapportStatus,
+          }])
+          .select('id')
+          .single();
 
-        // 1. GÉNÉRER LE PDF
+        if (insertError) throw new Error("Erreur BDD (draft): " + insertError.message);
+        const id = insertData.id as string;
+        setRapportId(id);
+
+        // 2. GÉNÉRER LE PDF
+        console.log("Génération du PDF en cours...");
         const pdfBlob = await generateEDL_PDF(updatedData);
 
-        // 2. UPLOADER LE PDF SUR SUPABASE
-        const fileName = `rapport_${Date.now()}.pdf`;
-        const { data: storageData, error: storageError } = await supabase.storage
-          .from('rapports-finaux') // Assure-toi d'avoir créé ce bucket !
-          .upload(fileName, pdfBlob, {
-            contentType: 'application/pdf',
-            upsert: true
-          });
+        // 3. UPLOADER LE PDF
+        const fileName = `rapport_${id}.pdf`;
+        const { error: storageError } = await supabase.storage
+          .from('rapports-finaux')
+          .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true });
 
         if (storageError) throw new Error("Erreur Storage: " + storageError.message);
 
-        // 3. ENREGISTRER EN BDD
-        const { data, error: dbError } = await supabase
+        // 4. TRANSITION → pdf_generated
+        const { error: updateError } = await supabase
           .from('rapports')
-          .insert([
-            { 
-              data: updatedData,
-              client_email: updatedData.metadata.locataire.email,
-              bailleur_email: updatedData.metadata.bailleur.email,
-              adresse_bien: updatedData.metadata.adresse_bien,
-              type_edl: updatedData.metadata.type,
-              pdf_url: fileName, // On stocke le nom du fichier PDF
-              is_paid: false 
-            }
-          ])
-          .select();
+          .update({
+            pdf_url: fileName,
+            status: 'pdf_generated' satisfies RapportStatus,
+          })
+          .eq('id', id);
 
-        if (dbError) throw new Error("Erreur BDD: " + dbError.message);
+        if (updateError) throw new Error("Erreur mise à jour status: " + updateError.message);
 
-        // 4. NETTOYAGE DES PHOTOS (Zéro Déchet)
-        // On le fait seulement si tout ce qui précède a réussi
-        await cleanupPhotos(updatedData);
-
-        // 5. TERMINER
         console.log("Rapport créé avec succès !");
-        setStep(5); 
+        setStep(5);
 
       } catch (error: any) {
         console.error("Échec du processus :", error);
@@ -457,9 +472,11 @@ export default function EdlForm() {
                     const file = e.target.files?.[0];
                     if (file) {
                       const url = await uploadToSupabase(file, "compteurs");
-                      const newCompteurs = [...formData.compteurs];
-                      newCompteurs[0].photo_url = url;
-                      setFormData({...formData, compteurs: newCompteurs});
+                      if (url) {
+                        const newCompteurs = [...formData.compteurs];
+                        newCompteurs[0].photo_url = url;
+                        setFormData({...formData, compteurs: newCompteurs});
+                      }
                     }
                   }} />
                 </label>
@@ -499,9 +516,11 @@ export default function EdlForm() {
                     const file = e.target.files?.[0];
                     if (file) {
                       const url = await uploadToSupabase(file, "compteurs");
-                      const newCompteurs = [...formData.compteurs];
-                      newCompteurs[1].photo_url = url;
-                      setFormData({...formData, compteurs: newCompteurs});
+                      if (url) {
+                        const newCompteurs = [...formData.compteurs];
+                        newCompteurs[1].photo_url = url;
+                        setFormData({...formData, compteurs: newCompteurs});
+                      }
                     }
                   }} />
                 </label>
@@ -553,9 +572,11 @@ export default function EdlForm() {
                             const file = e.target.files?.[0];
                             if (!file) return;
                             const url = await uploadToSupabase(file, "pieces");
-                            const newPieces = [...formData.pieces];
-                            newPieces[pIndex].photo_url = url; // On ajoute l'URL à la pièce
-                            setFormData({...formData, pieces: newPieces});
+                            if (url) {
+                              const newPieces = [...formData.pieces];
+                              newPieces[pIndex].photo_url = url;
+                              setFormData({...formData, pieces: newPieces});
+                            }
                           }} 
                         />
                       </label>
@@ -587,9 +608,11 @@ export default function EdlForm() {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
                                       const url = await uploadToSupabase(file, "degats");
-                                      const newPieces = [...formData.pieces];
-                                      newPieces[pIndex].elements[eIndex].photo_url = url;
-                                      setFormData({...formData, pieces: newPieces});
+                                      if (url) {
+                                        const newPieces = [...formData.pieces];
+                                        newPieces[pIndex].elements[eIndex].photo_url = url;
+                                        setFormData({...formData, pieces: newPieces});
+                                      }
                                     }} 
                                   />
                                 </label>
@@ -733,18 +756,89 @@ export default function EdlForm() {
             )}
 
             {step === 5 && (
-              <div className="py-12 text-center animate-in zoom-in duration-500">
-                <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">
-                  ✓
-                </div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">Rapport Enregistré !</h2>
-                <p className="text-slate-500 mb-8">Votre état des lieux est maintenant sécurisé dans la base de données.</p>
-                <button 
-                  onClick={() => window.location.reload()} 
-                  className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold"
-                >
-                  Créer un nouveau rapport
-                </button>
+              <div className="animate-in zoom-in duration-500">
+                {/* Sous-état C — dossier clôturé après purge */}
+                {purgeState === 'purged' && (
+                  <div className="py-12 text-center">
+                    <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">✓</div>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Dossier clôturé</h2>
+                    <p className="text-slate-500 mb-8">PDF archivé · Photos purgées</p>
+                    <button onClick={() => window.location.reload()} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold">
+                      Créer un nouveau rapport
+                    </button>
+                  </div>
+                )}
+
+                {/* Sous-état A — confirmation initiale + bouton purge */}
+                {purgeState !== 'purged' && (
+                  <div className="py-8 space-y-6">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">✓</div>
+                      <h2 className="text-xl font-bold text-slate-900">État des lieux enregistré</h2>
+                      <p className="text-slate-500 text-sm mt-1">{formData.metadata.adresse_bien} · {formData.metadata.type}</p>
+                    </div>
+
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800 space-y-1">
+                      <p className="font-semibold">Photos conservées temporairement</p>
+                      <p>Une fois que vous avez archivé le PDF, vous pouvez purger les photos de l'espace de stockage. Cette action est irréversible.</p>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={() => setPurgeState('confirming')}
+                        disabled={purgeState === 'purging'}
+                        className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold hover:bg-red-700 transition disabled:bg-slate-200"
+                      >
+                        Purger les photos
+                      </button>
+                      <button onClick={() => window.location.reload()} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition">
+                        Créer un nouveau rapport
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sous-état B — modale de confirmation avant purge */}
+                {purgeState === 'confirming' && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 animate-in zoom-in-95">
+                      <h3 className="text-lg font-bold text-slate-900">Action irréversible</h3>
+                      <p className="text-slate-600 text-sm">
+                        Les photos ne seront plus récupérables après cette étape.<br />
+                        Avez-vous bien archivé le PDF ?
+                      </p>
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          onClick={() => setPurgeState('idle')}
+                          className="flex-1 py-3 rounded-xl border border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 transition"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!rapportId) return;
+                            setPurgeState('purging');
+                            try {
+                              // Passage manuel à email_delivered (substitut webhook Resend)
+                              await supabase
+                                .from('rapports')
+                                .update({ status: 'email_delivered' satisfies RapportStatus })
+                                .eq('id', rapportId);
+                              await cleanupPhotos(rapportId, formData);
+                              setPurgeState('purged');
+                            } catch {
+                              alert("Erreur lors de la purge. Réessayez.");
+                              setPurgeState('idle');
+                            }
+                          }}
+                          className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition"
+                        >
+                          Confirmer la purge
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
       </div>
