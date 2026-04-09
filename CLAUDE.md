@@ -397,6 +397,7 @@ eIDAS via Yousign, PWA offline complète.
 
 - [ ] **Auditer et durcir toutes les policies RLS** (actuellement permissives en mode anon pour INSERT/UPDATE/DELETE)
 - [ ] **Supprimer les photos orphelines** lors du remplacement d'une photo par l'utilisateur : quand une nouvelle photo est uploadée à la place d'une existante, l'ancienne URL est écrasée dans le state mais le fichier reste dans le bucket `photos-etats-des-lieux`. À corriger avant prod.
+- [ ] **Rédiger CGU/CGV** incluant la clause sur le délai de téléchargement des photos (48h) et la valeur probante exclusive du PDF après purge. Clause type : "Le client reconnaît que les photos sont mises à disposition via un lien temporaire de 48h et qu'il lui incombe de les télécharger et archiver dans ce délai. Passé ce délai, seul le PDF fait foi comme document contradictoire."
 
 ## 🤝 Conventions de travail avec Claude Code
 
