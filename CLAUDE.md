@@ -12,9 +12,11 @@
 - **État:** Gestion via `formData` local et `useState` pour les étapes.
 
 ## Structure de Données & Storage
-- **Bucket `photos-etats-des-lieux`:** Stockage temporaire des photos durant l'EDL. **DOIT ÊTRE PURGÉ** après la génération du rapport via la fonction `cleanupPhotos`.
-- **Bucket `rapports-finaux`:** Stockage permanent des PDF générés.
-- **Table `rapports`:** Contient les métadonnées et la colonne `pdf_url`.
+- **Bucket `photos-etats-des-lieux`:** Photos sources temporaires. Supprimées dès que le ZIP est uploadé (`zip_created`).
+- **Bucket `edl-zips`:** ZIP des photos. Path : `{rapportId}/dossier-photos.zip`. Supprimé 48h après `email_delivered` (cron 5.ter).
+- **Bucket `rapports-finaux`:** PDF générés. Conservés 9 ans.
+- **Table `rapports`:** Métadonnées + colonnes `pdf_url`, `status`, `archive_expires_at`, `archive_json`.
+- **Table `email_events`:** Log de tous les webhooks Resend et renvois manuels.
 
 ## Commandes Utiles
 - `npm run dev` : Lancer le serveur local
@@ -64,15 +66,18 @@ avec un workflow fluide de ~15 minutes. Avantage concurrentiel = vitesse de gén
 1. **PDF final < 700 Ko** — compression images obligatoire avant intégration.
 2. **Ne jamais modifier la structure de la table `rapports`** sans demander
    confirmation explicite à l'utilisateur.
-3. **`cleanupPhotos` ne se déclenche QUE** quand le mail ET le ZIP sont confirmés
-   livrés (webhook Resend `delivered`). Jamais avant.
+3. **La purge des photos sources se déclenche immédiatement** dès que le ZIP est
+   uploadé avec succès (`zip_created`). La purge du ZIP lui-même n'a lieu que 48 h
+   après `email_delivered`, via le cron quotidien. Jamais avant.
 4. **Ne jamais employer "signature électronique certifiée"** dans le marketing
    ou l'UI tant qu'eIDAS n'est pas intégré (zone grise juridique).
 
 ## Structure de Données & Storage
-- **Bucket `photos-etats-des-lieux`:** Stockage temporaire des photos durant l'EDL. **DOIT ÊTRE PURGÉ** après la génération du rapport via la fonction `cleanupPhotos`.
-- **Bucket `rapports-finaux`:** Stockage permanent des PDF générés.
-- **Table `rapports`:** Contient les métadonnées et la colonne `pdf_url`.
+- **Bucket `photos-etats-des-lieux`:** Photos sources temporaires. Supprimées dès que le ZIP est uploadé (`zip_created`).
+- **Bucket `edl-zips`:** ZIP des photos. Path : `{rapportId}/dossier-photos.zip`. Supprimé 48h après `email_delivered` (cron 5.ter).
+- **Bucket `rapports-finaux`:** PDF générés. Conservés 9 ans.
+- **Table `rapports`:** Métadonnées + colonnes `pdf_url`, `status`, `archive_expires_at`, `archive_json`.
+- **Table `email_events`:** Log de tous les webhooks Resend et renvois manuels.
 
 ## Commandes Utiles
 - `npm run dev` : Lancer le serveur local
@@ -107,25 +112,29 @@ Le reste du code ne doit jamais connaître l'implémentation concrète.
 
 ### 3. Machine à états sur la table `rapports`
 
-Ajouter un champ `status` (enum) avec les transitions suivantes :
+Champ `status` (enum) avec les transitions suivantes :
 
 ```
 draft
   → payment_pending   ← Stripe Checkout initié
   → paid              ← webhook Stripe payment_intent.succeeded → déclenche génération PDF
   → pdf_generated
-  → zip_created
+  → zip_created       ← ZIP uploadé sur Storage ; photos sources supprimées immédiatement
   → email_sent
-  → email_delivered   ← via webhook Resend
-  → purged            ← déclenche cleanupPhotos
+  → email_delivered   ← via webhook Resend ; démarre le TTL 48h
+  → purged            ← cron quotidien, 48h après email_delivered (ZIP supprimé)
 ```
 
-**Règle absolue** : la purge ne se déclenche QUE sur `status = 'email_delivered'`.
-Si le webhook Resend renvoie `bounced` ou `complained`, on passe en état d'erreur
-et on NE PURGE PAS.
+**Règles de purge** (pilotées par le cron quotidien — voir §8) :
+- `draft` depuis > 24 h → purge totale (ligne DB + photos sources)
+- `payment_pending` depuis > 1 h → purge totale (paiement abandonné ou échoué)
+- `email_delivered` depuis > 48 h → suppression du ZIP uploadé uniquement ; PDF et `archive_json` conservés 9 ans
 
-Table dédiée `email_events` pour logger tous les webhooks Resend (assurance-vie
-juridique en cas de litige).
+Si le webhook Resend renvoie `bounced` ou `complained`, on NE PURGE PAS et on reste
+en état `email_sent` (pas de transition vers `email_delivered`).
+
+Table dédiée `email_events` pour logger tous les webhooks Resend et les renvois manuels
+(assurance-vie juridique en cas de litige).
 
 ### 6. Modèle économique : paiement à l'acte via Stripe
 
@@ -145,6 +154,36 @@ Flux Stripe :
 Un rapport resté en `payment_pending` depuis plus de 1 h peut être considéré abandonné
 (paiement échoué ou annulé) — le cron quotidien (voir roadmap) le purgera avec les
 drafts expirés.
+
+### 7. Livraison email : PDF en pièce jointe, ZIP via lien signé
+
+**Contrainte découverte** : les limites des pièces jointes mail (Gmail 25 Mo, Outlook
+20 Mo) sont incompatibles avec un ZIP de photos EDL réaliste (75–125 Mo pour 25 photos
+de smartphone). Le ZIP ne doit **jamais** partir en pièce jointe.
+
+**Logique d'envoi actée** :
+- Le **PDF** est envoyé en pièce jointe (< 700 Ko, OK partout).
+- Le **ZIP** est uploadé sur Supabase Storage (bucket `edl-zips`, path
+  `{rapportId}/dossier-photos.zip`) → transition `zip_created`.
+- Le mail contient un **lien signé** `createSignedUrl()` vers le ZIP, avec une
+  expiration calée sur J+2 (48 h après `email_delivered`, même moment que la purge).
+- Le corps du mail affiche explicitement la date d'expiration du lien, pour incarner
+  la philosophie Zéro Déchet.
+- Supabase logge les accès aux liens signés → preuve contradictoire en cas de litige
+  ("Le ZIP a bien été téléchargé le [date]").
+
+**Séquence de purge affinée** :
+1. `zip_created` → photos sources individuelles supprimées immédiatement du bucket.
+2. `email_delivered` + 48 h (cron) → fichier ZIP supprimé du bucket `edl-zips`.
+3. PDF + `archive_json` : conservés 9 ans.
+
+**Bouton "Je n'ai pas reçu le mail"** (voir Garde-fous UX) :
+- Régénère un lien signé frais (valide jusqu'à la date de purge).
+- Relance le mail complet via Resend (PDF en PJ + nouveau lien ZIP signé).
+- Log dans `email_events` : `event_type = 'resent'`.
+- Si le statut est déjà `purged` : le renvoi contient uniquement le PDF avec la
+  mention "Les photos originales ont été supprimées conformément à notre politique
+  Zéro Déchet. Le PDF reste votre document légal de référence."
 
 ### 4. Structure de données extensible : `elements[]` générique
 
@@ -226,6 +265,19 @@ export const pieceTemplates: Record<PieceKind, ElementTemplate[]> = {
 **Priorité d'ajout des pièces** : WC en premier (le plus oublié, source #1 de
 litiges), puis parking, puis cave, puis balcon.
 
+### 8. Purge automatique — cron quotidien Supabase (3 TTL)
+
+Un seul cron quotidien (pg_cron ou Edge Function planifiée) gère les 3 règles :
+
+| Condition | Action |
+|---|---|
+| `status = 'draft'` depuis > 24 h | Purge totale : suppression ligne DB + photos sources dans `photos-etats-des-lieux` |
+| `status = 'payment_pending'` depuis > 1 h | Purge totale : paiement abandonné ou échoué |
+| `status = 'email_delivered'` depuis > 48 h | Suppression du ZIP dans `edl-zips` uniquement → `status = 'purged'` |
+
+PDF (`rapports-finaux`) et `archive_json` ne sont jamais touchés par ce cron.
+Ils restent jusqu'à `archive_expires_at` (created_at + 9 ans), purgés par un cron séparé.
+
 ## 📜 Conformité Loi Alur — éléments obligatoires
 
 Chaque pièce doit inclure **par défaut et de manière non supprimable** (socle Alur) :
@@ -287,18 +339,30 @@ Cron Supabase quotidien qui purge tout ce qui dépasse (RGPD-propre by design).
 
 ## 🛡️ Garde-fous UX critiques
 
-1. **Double livraison email** : le ZIP + PDF partent simultanément au bailleur
-   ET au locataire. Deux copies dans la nature = preuve contradictoire, et on
-   ne peut pas nous accuser d'avoir "perdu" quoi que ce soit.
+1. **Double livraison email** : le PDF (PJ) + lien ZIP signé partent simultanément
+   au bailleur ET au locataire. Deux copies dans la nature = preuve contradictoire.
 
-2. **Écran de confirmation avant purge** :
-   > "Ces fichiers ne seront plus récupérables après cette étape.
-   > Avez-vous bien reçu le mail ?
-   > [Oui, supprimer] / [Non, renvoyer]"
+2. **Écran de succès final — automatisé, sans bouton "Purger"** :
+   La purge est désormais entièrement pilotée par le cron (TTL). L'utilisateur ne
+   porte plus cette responsabilité technique. L'écran final affiche simplement :
 
-3. **Fallback sans email** : lien de téléchargement signé (expiration 7 jours)
-   que le bailleur peut partager par SMS/WhatsApp/papier pour les locataires
-   sans adresse mail.
+   > ✅ Votre EDL a été envoyé
+   >
+   > Le PDF et les photos ont été envoyés à :
+   > — [email_bailleur]
+   > — [email_locataire]
+   >
+   > Vos photos seront automatiquement supprimées dans 48h, conformément à notre
+   > politique Zéro Déchet. Le PDF reste votre document légal de référence.
+   >
+   > [🔄 Je n'ai pas reçu le mail — renvoyer]   [➕ Créer un nouveau rapport]
+
+   Le bouton "Je n'ai pas reçu le mail" ouvre une modale permettant de corriger
+   une éventuelle faute de frappe dans les adresses, puis redéclenche l'envoi
+   complet (nouveau lien signé ZIP + PDF en PJ). Voir §7 pour la logique de renvoi.
+
+3. **Fallback sans email** : le lien signé ZIP (J+2) peut être partagé par
+   SMS/WhatsApp/papier pour les locataires sans adresse mail.
 
 4. **Mode brouillon offline** : service worker + localStorage pour conserver
    la saisie en cours. Les caves/parkings/combles n'ont pas toujours de 4G.
@@ -310,20 +374,21 @@ Ordre d'implémentation recommandé :
 
 1. ~~**Machine à états `status`**~~ ✅ FAIT — machine à états + écran de confirmation manuelle
 2. **Migration `jsPDF` → `pdf-lib`** (0.5-1 j) — à faire avant d'ajouter des features PDF
-3. **ZIP + Resend + webhook de confirmation** (1 j) — objectif initial, safe grâce au #1
+3. **ZIP + Resend + webhook de confirmation** (1 j) — PDF en PJ, ZIP via lien signé Supabase J+2
 4. **Refonte PDF** : mentions légales + hash + annexe photos numérotées (1 j)
 5. **Structure `elements[]` + templates de pièces** (1-2 j) — AVANT d'ajouter WC/parking
-6. **Écran double confirmation avant purge** (2 h) — minuscule effort, immense valeur
+5.ter. **Cron de purge automatique — 3 TTL** (2 h) — règles draft/24h, payment_pending/1h,
+    email_delivered/48h ; remplace l'écran de confirmation manuelle ; voir §8
+6. **Écran de succès final automatisé** (1 h) — remplace l'écran de confirmation actuel
+    (sous-états A/B/C) par l'écran simple "EDL envoyé" + bouton "Je n'ai pas reçu"
 7. **Mode brouillon localStorage** (0.5 j) — discret mais critique
 8. **Ajout pièces WC, parking, cave, balcon** (2 h chacune grâce aux templates)
 9. **Badge "Conforme Loi Alur"** (2 h)
 10. **Intégration Stripe Checkout** (1 j) — statuts `payment_pending` et `paid` ; le webhook
     `payment_intent.succeeded` devient le déclencheur de la génération PDF à la place de
     l'INSERT direct. À faire après la refonte PDF (#4) pour ne pas payer un PDF bancal.
-11. **Cron Supabase quotidien — purge des drafts expirés** (2 h) — supprime les rapports
-    en `status IN ('draft', 'payment_pending')` depuis plus de 24 h ainsi que leurs photos
-    orphelines dans le bucket `photos-etats-des-lieux`. Implémentation : Supabase pg_cron
-    ou Edge Function planifiée.
+11. **Cron Supabase quotidien — archivage 9 ans** (2 h) — supprime les rapports dont
+    `archive_expires_at` est dépassé (PDF + archive_json). Distinct du cron de purge 5.ter.
 
 Post-MVP : import EDL d'entrée externe, intégration DPE, mode meublé avancé,
 eIDAS via Yousign, PWA offline complète.
