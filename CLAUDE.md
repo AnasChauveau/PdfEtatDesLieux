@@ -373,22 +373,29 @@ Cron Supabase quotidien qui purge tout ce qui dépasse (RGPD-propre by design).
 Ordre d'implémentation recommandé :
 
 1. ~~**Machine à états `status`**~~ ✅ FAIT — machine à états + écran de confirmation manuelle
-2. **Migration `jsPDF` → `pdf-lib`** (0.5-1 j) — à faire avant d'ajouter des features PDF
-3. **ZIP + Resend + webhook de confirmation** (1 j) — PDF en PJ, ZIP via lien signé Supabase J+2
+2. ~~**Migration `jsPDF` → `pdf-lib`**~~ ✅ FAIT — contrôle fin de la mise en page, images, word wrap
+3. **ZIP + Resend + écran de succès** (1 j) — PDF en PJ, ZIP via lien signé Supabase J+2 ;
+    inclut l'écran final "EDL envoyé" (remplace les sous-états A/B/C) avec bouton
+    "Je n'ai pas reçu le mail" et mention de la date de purge automatique
 4. **Refonte PDF** : mentions légales + hash + annexe photos numérotées (1 j)
 5. **Structure `elements[]` + templates de pièces** (1-2 j) — AVANT d'ajouter WC/parking
 5.ter. **Cron de purge automatique — 3 TTL** (2 h) — règles draft/24h, payment_pending/1h,
     email_delivered/48h ; remplace l'écran de confirmation manuelle ; voir §8
-6. **Écran de succès final automatisé** (1 h) — remplace l'écran de confirmation actuel
-    (sous-états A/B/C) par l'écran simple "EDL envoyé" + bouton "Je n'ai pas reçu"
-7. **Mode brouillon localStorage** (0.5 j) — discret mais critique
-8. **Ajout pièces WC, parking, cave, balcon** (2 h chacune grâce aux templates)
-9. **Badge "Conforme Loi Alur"** (2 h)
-10. **Intégration Stripe Checkout** (1 j) — statuts `payment_pending` et `paid` ; le webhook
+6. **AUTH** (Supabase Magic Link + user_id sur rapports + migration RLS anon→authenticated)
+7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté)
+8. **Mode brouillon localStorage** (0.5 j) — discret mais critique
+9. **Ajout pièces WC, parking, cave, balcon** (2 h chacune grâce aux templates)
+10. **Badge "Conforme Loi Alur"** (2 h)
+11. **Intégration Stripe Checkout** (1 j) — statuts `payment_pending` et `paid` ; le webhook
     `payment_intent.succeeded` devient le déclencheur de la génération PDF à la place de
     l'INSERT direct. À faire après la refonte PDF (#4) pour ne pas payer un PDF bancal.
-11. **Cron Supabase quotidien — archivage 9 ans** (2 h) — supprime les rapports dont
+    ⚠️ L'app utilisera Supabase Auth (Magic Link email). Pour l'instant on continue en mode
+    anon. L'auth sera intégrée à l'étape Auth (#6) de la roadmap. Ne crée aucune dépendance
+    à l'authentification dans cette étape.
+12. **Cron Supabase quotidien — archivage 9 ans** (2 h) — supprime les rapports dont
     `archive_expires_at` est dépassé (PDF + archive_json). Distinct du cron de purge 5.ter.
+13. **Page landing + exemple PDF statique** — page publique de présentation avec un PDF
+    d'exemple téléchargeable (argument commercial, confiance utilisateur)
 
 Post-MVP : import EDL d'entrée externe, intégration DPE, mode meublé avancé,
 eIDAS via Yousign, PWA offline complète.
