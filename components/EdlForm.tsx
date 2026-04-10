@@ -11,8 +11,16 @@ import type { RapportStatus } from '@/lib/types';
 export default function EdlForm() {
     const [step, setStep] = useState(1);
     const [rapportId, setRapportId] = useState<string | null>(null);
-    // 'idle' = écran succès, 'confirming' = modale ouverte, 'purging' = en cours, 'purged' = terminé
-    const [purgeState, setPurgeState] = useState<'idle' | 'confirming' | 'purging' | 'purged'>('idle');
+    // 'idle' = avant envoi, 'sending' = Edge Function en cours (ZIP + email),
+    // 'success' = email envoyé, 'emailFailed' = ZIP ok mais email échoué, 'error' = erreur critique
+    const [sendState, setSendState] = useState<'idle' | 'sending' | 'success' | 'emailFailed' | 'error'>('idle');
+    const [sendError, setSendError] = useState<string | null>(null);
+    // Modale "Je n'ai pas reçu le mail"
+    const [resendModalOpen, setResendModalOpen] = useState(false);
+    const [resendBailleurEmail, setResendBailleurEmail] = useState('');
+    const [resendLocataireEmail, setResendLocataireEmail] = useState('');
+    const [resendSent, setResendSent] = useState(false);
+    const [isResending, setIsResending] = useState(false);
 
     // États pour stocker les aperçus des photos
     const [elecPhoto, setElecPhoto] = useState<string | null>(null);
@@ -98,9 +106,10 @@ export default function EdlForm() {
     const uploadToSupabase = async (file: File, folder: string) => {
       // A. Options de compression
       const options = {
-        maxSizeMB: 0.2,          // Max 200 Ko
-        maxWidthOrHeight: 1280, // Résolution largement suffisante pour du PDF
-        useWebWorker: true
+        maxSizeMB: 2,
+        maxWidthOrHeight: 2000,
+        useWebWorker: true,
+        fileType: 'image/jpeg',   // force JPEG en sortie — WebP/HEIC/PNG normalisés
       };
 
       try {
@@ -108,8 +117,7 @@ export default function EdlForm() {
         const compressedFile = await imageCompression(file, options);
         
         // C. Upload du fichier compressé
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
+        const fileName = `${Math.random()}.jpg`;   // toujours .jpg — cohérent avec fileType
         const filePath = `${folder}/${fileName}`;
 
         const { error } = await supabase.storage
@@ -129,63 +137,7 @@ export default function EdlForm() {
       }
     };
 
-    // 2. NETTOYAGE DES PHOTOS — déclenché uniquement si status = 'email_delivered'
-    const cleanupPhotos = async (id: string, data: any) => {
-      // Garde DB : refuser si le rapport n'est pas en état 'email_delivered'
-      const { data: rapport } = await supabase
-        .from('rapports')
-        .select('status')
-        .eq('id', id)
-        .single();
-
-      if ((rapport?.status as RapportStatus) !== 'email_delivered') {
-        console.warn('cleanupPhotos bloqué — status actuel :', rapport?.status);
-        return;
-      }
-
-      try {
-        const photosToDelete: string[] = [];
-
-        const extractPath = (url: string) => {
-          if (!url) return null;
-          const bucketName = 'photos-etats-des-lieux/';
-          if (url.includes(bucketName)) return url.split(bucketName)[1];
-          return null;
-        };
-
-        data.compteurs.forEach((c: any) => {
-          const p = extractPath(c.photo_url); if (p) photosToDelete.push(p);
-        });
-
-        data.pieces.forEach((piece: any) => {
-          const pPiece = extractPath(piece.photo_url); if (pPiece) photosToDelete.push(pPiece);
-          piece.elements.forEach((el: any) => {
-            const pEl = extractPath(el.photo_url); if (pEl) photosToDelete.push(pEl);
-          });
-        });
-
-        if (photosToDelete.length > 0) {
-          const uniquePaths = [...new Set(photosToDelete)];
-          const { error } = await supabase.storage
-            .from('photos-etats-des-lieux')
-            .remove(uniquePaths);
-          if (error) console.error("Erreur suppression fichiers:", error);
-          else console.log(`Nettoyage réussi : ${uniquePaths.length} photos supprimées.`);
-        }
-
-        // Transition finale : purged
-        await supabase
-          .from('rapports')
-          .update({ status: 'purged' satisfies RapportStatus })
-          .eq('id', id);
-
-      } catch (err) {
-        console.error("Erreur globale nettoyage:", err);
-        throw err;
-      }
-    };
-
-    // 3. SAUVEGARDE DU RAPPORT — machine à états : draft → pdf_generated
+    // 2. SAUVEGARDE DU RAPPORT — machine à états : draft → pdf_generated → email_sent
     const saveRapport = async (updatedData: any) => {
       try {
         // 1. INSERT brouillon en DB pour obtenir l'ID tôt
@@ -230,12 +182,38 @@ export default function EdlForm() {
 
         if (updateError) throw new Error("Erreur mise à jour status: " + updateError.message);
 
-        console.log("Rapport créé avec succès !");
+        // 5. Passer en step 5 (écran de chargement) et appeler zip-and-send
         setStep(5);
+        setSendState('sending');
+
+        const functionsUrl = process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL;
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        const efRes = await fetch(`${functionsUrl}/zip-and-send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ rapportId: id }),
+        });
+
+        if (efRes.ok) {
+          setSendState('success');
+        } else {
+          const body = await efRes.json().catch(() => ({})) as { error?: string; canRetry?: boolean };
+          if (body.canRetry) {
+            setSendState('emailFailed');
+          } else {
+            setSendState('error');
+            setSendError(body.error ?? 'Erreur lors de la génération du dossier.');
+          }
+        }
 
       } catch (error: any) {
         console.error("Échec du processus :", error);
-        alert("Désolé, une erreur est survenue : " + error.message);
+        setSendState('error');
+        setSendError(error.message ?? 'Erreur inattendue.');
+        setStep(5);
       }
     };
 
@@ -729,7 +707,8 @@ export default function EdlForm() {
                       alert("Les deux parties doivent signer.");
                       return;
                     }
-                    
+                    setSendState('sending');   // désactive le bouton immédiatement
+
                     // 1. On capture les signatures à l'instant T
                     const signB = sigBailleur.current.getCanvas().toDataURL('image/png');
                     const signL = sigLocataire.current.getCanvas().toDataURL('image/png');
@@ -748,48 +727,58 @@ export default function EdlForm() {
                     saveRapport(finalData); 
                   }}
 
-                  className="w-full bg-green-600 text-white py-4 rounded-2xl font-extrabold shadow-lg hover:bg-green-700 transition"
+                  disabled={sendState !== 'idle'}
+                  className="w-full bg-green-600 text-white py-4 rounded-2xl font-extrabold shadow-lg hover:bg-green-700 transition disabled:bg-slate-300 disabled:cursor-not-allowed disabled:shadow-none"
                 >
-                  Clôturer l'État des Lieux
+                  {sendState === 'sending' ? 'Génération en cours…' : 'Clôturer l\'État des Lieux'}
                 </button>
               </div>
             )}
 
             {step === 5 && (
               <div className="animate-in zoom-in duration-500">
-                {/* Sous-état C — dossier clôturé après purge */}
-                {purgeState === 'purged' && (
-                  <div className="py-12 text-center">
-                    <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">✓</div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Dossier clôturé</h2>
-                    <p className="text-slate-500 mb-8">PDF archivé · Photos purgées</p>
-                    <button onClick={() => window.location.reload()} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold">
-                      Créer un nouveau rapport
-                    </button>
+
+                {/* État : envoi en cours */}
+                {sendState === 'sending' && (
+                  <div className="py-16 text-center space-y-6">
+                    <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto" />
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">Génération du dossier en cours…</h2>
+                      <p className="text-slate-500 text-sm mt-2">Compression des photos, création du ZIP et envoi des emails.<br />Cela peut prendre 30 à 60 secondes.</p>
+                    </div>
+                    <p className="text-xs text-slate-400">Vous pouvez fermer cet onglet — vous recevrez votre email dans quelques instants.</p>
                   </div>
                 )}
 
-                {/* Sous-état A — confirmation initiale + bouton purge */}
-                {purgeState !== 'purged' && (
+                {/* État : succès — email envoyé */}
+                {sendState === 'success' && (
                   <div className="py-8 space-y-6">
                     <div className="text-center">
-                      <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">✓</div>
-                      <h2 className="text-xl font-bold text-slate-900">État des lieux enregistré</h2>
+                      <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">✓</div>
+                      <h2 className="text-2xl font-bold text-slate-900">Votre état des lieux a été envoyé</h2>
                       <p className="text-slate-500 text-sm mt-1">{formData.metadata.adresse_bien} · {formData.metadata.type}</p>
                     </div>
 
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800 space-y-1">
-                      <p className="font-semibold">Photos conservées temporairement</p>
-                      <p>Une fois que vous avez archivé le PDF, vous pouvez purger les photos de l'espace de stockage. Cette action est irréversible.</p>
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-700 space-y-1">
+                      <p className="font-semibold">Le PDF et les photos ont été envoyés à :</p>
+                      <p>— {formData.metadata.bailleur.email}</p>
+                      <p>— {formData.metadata.locataire.email}</p>
+                    </div>
+
+                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-sm text-blue-800">
+                      Les photos seront automatiquement supprimées dans 48h, conformément à notre politique Zéro Déchet. Le PDF reste votre document légal de référence.
                     </div>
 
                     <div className="flex flex-col gap-3">
                       <button
-                        onClick={() => setPurgeState('confirming')}
-                        disabled={purgeState === 'purging'}
-                        className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold hover:bg-red-700 transition disabled:bg-slate-200"
+                        onClick={() => {
+                          setResendBailleurEmail(formData.metadata.bailleur.email);
+                          setResendLocataireEmail(formData.metadata.locataire.email);
+                          setResendModalOpen(true);
+                        }}
+                        className="w-full border border-slate-300 text-slate-700 py-3 rounded-2xl font-semibold hover:bg-slate-50 transition"
                       >
-                        Purger les photos
+                        Je n'ai pas reçu le mail
                       </button>
                       <button onClick={() => window.location.reload()} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition">
                         Créer un nouveau rapport
@@ -798,44 +787,128 @@ export default function EdlForm() {
                   </div>
                 )}
 
-                {/* Sous-état B — modale de confirmation avant purge */}
-                {purgeState === 'confirming' && (
+                {/* État : ZIP ok mais email échoué — proposer retry */}
+                {sendState === 'emailFailed' && (
+                  <div className="py-8 space-y-6">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">!</div>
+                      <h2 className="text-xl font-bold text-slate-900">Dossier prêt, email non envoyé</h2>
+                      <p className="text-slate-500 text-sm mt-1">Le dossier ZIP a été créé mais l'envoi de l'email a échoué.</p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={async () => {
+                          setSendState('sending');
+                          try {
+                            const res = await fetch('/api/resend-mail', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ rapportId }),
+                            });
+                            if (res.ok) setSendState('success');
+                            else setSendState('emailFailed');
+                          } catch {
+                            setSendState('emailFailed');
+                          }
+                        }}
+                        className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition"
+                      >
+                        Réessayer l'envoi
+                      </button>
+                      <button onClick={() => window.location.reload()} className="w-full border border-slate-300 text-slate-700 py-3 rounded-2xl font-semibold hover:bg-slate-50 transition">
+                        Créer un nouveau rapport
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* État : erreur critique */}
+                {sendState === 'error' && (
+                  <div className="py-8 space-y-6 text-center">
+                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-3xl">✕</div>
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">Une erreur est survenue</h2>
+                      {sendError && <p className="text-slate-500 text-sm mt-2">{sendError}</p>}
+                    </div>
+                    <button onClick={() => window.location.reload()} className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold">
+                      Recommencer
+                    </button>
+                  </div>
+                )}
+
+                {/* Modale "Je n'ai pas reçu le mail" */}
+                {resendModalOpen && (
                   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 animate-in zoom-in-95">
-                      <h3 className="text-lg font-bold text-slate-900">Action irréversible</h3>
-                      <p className="text-slate-600 text-sm">
-                        Les photos ne seront plus récupérables après cette étape.<br />
-                        Avez-vous bien archivé le PDF ?
-                      </p>
-                      <div className="flex gap-3 pt-2">
-                        <button
-                          onClick={() => setPurgeState('idle')}
-                          className="flex-1 py-3 rounded-xl border border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 transition"
-                        >
-                          Annuler
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!rapportId) return;
-                            setPurgeState('purging');
-                            try {
-                              // Passage manuel à email_delivered (substitut webhook Resend)
-                              await supabase
-                                .from('rapports')
-                                .update({ status: 'email_delivered' satisfies RapportStatus })
-                                .eq('id', rapportId);
-                              await cleanupPhotos(rapportId, formData);
-                              setPurgeState('purged');
-                            } catch {
-                              alert("Erreur lors de la purge. Réessayez.");
-                              setPurgeState('idle');
-                            }
-                          }}
-                          className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition"
-                        >
-                          Confirmer la purge
-                        </button>
-                      </div>
+                      {resendSent ? (
+                        <>
+                          <div className="text-center py-4">
+                            <div className="text-4xl mb-3">✓</div>
+                            <h3 className="text-lg font-bold text-slate-900">Email renvoyé</h3>
+                            <p className="text-slate-500 text-sm mt-1">Vérifiez vos boîtes de réception.</p>
+                          </div>
+                          <button onClick={() => { setResendModalOpen(false); setResendSent(false); }} className="w-full py-3 rounded-xl bg-slate-900 text-white font-bold">
+                            Fermer
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <h3 className="text-lg font-bold text-slate-900">Renvoyer les emails</h3>
+                          <p className="text-slate-500 text-sm">Vérifiez ou corrigez les adresses avant de renvoyer.</p>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">Email Bailleur</label>
+                              <input
+                                type="email"
+                                className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                                value={resendBailleurEmail}
+                                onChange={(e) => setResendBailleurEmail(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-bold uppercase text-slate-400 mb-1 block">Email Locataire</label>
+                              <input
+                                type="email"
+                                className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                                value={resendLocataireEmail}
+                                onChange={(e) => setResendLocataireEmail(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-3 pt-2">
+                            <button onClick={() => setResendModalOpen(false)} className="flex-1 py-3 rounded-xl border border-slate-300 font-semibold text-slate-700 hover:bg-slate-50 transition">
+                              Annuler
+                            </button>
+                            <button
+                              disabled={isResending}
+                              onClick={async () => {
+                                setIsResending(true);
+                                try {
+                                  const res = await fetch('/api/resend-mail', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      rapportId,
+                                      bailleurEmail: resendBailleurEmail,
+                                      locataireEmail: resendLocataireEmail,
+                                    }),
+                                  });
+                                  if (res.ok) setResendSent(true);
+                                  else if (res.status === 429) alert('Veuillez patienter avant de renvoyer.');
+                                  else alert('Erreur lors du renvoi. Réessayez.');
+                                } catch {
+                                  alert('Erreur réseau. Réessayez.');
+                                } finally {
+                                  setIsResending(false);
+                                }
+                              }}
+                              className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed"
+                            >
+                              {isResending ? 'Envoi en cours…' : 'Renvoyer'}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
