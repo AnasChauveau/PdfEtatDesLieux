@@ -65,10 +65,11 @@ export default function EdlForm() {
     // Retourne { url, hash } où hash = SHA-256 hex du fichier compressé (même octets que dans le ZIP)
     const uploadToSupabase = async (file: File, folder: string): Promise<{ url: string; hash: string } | null> => {
       const options = {
-        maxSizeMB: 2,
-        maxWidthOrHeight: 2000,
+        maxSizeMB: 0.8,
+        maxWidthOrHeight: 1600,
         useWebWorker: true,
         fileType: 'image/jpeg',   // force JPEG en sortie — WebP/HEIC/PNG normalisés
+        initialQuality: 0.82,
       };
 
       try {

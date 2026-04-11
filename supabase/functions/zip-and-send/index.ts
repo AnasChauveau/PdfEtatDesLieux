@@ -55,8 +55,11 @@ async function compressPhoto(url: string): Promise<{ bytes: Uint8Array } | { err
     if (!res.ok) return { error: `HTTP ${res.status} ${res.statusText}` };
     const raw = new Uint8Array(await res.arrayBuffer());
     const img = await Image.decode(raw);
+    // Skip resize si déjà assez petit (gain CPU majeur sur photos déjà compressées côté client)
     if (img.width > 2000 || img.height > 2000) {
       img.resize(2000, Image.RESIZE_AUTO);
+    } else {
+      console.log(`[photo] skip resize (${img.width}x${img.height})`);
     }
     const bytes = await img.encodeJPEG(85);
     return { bytes };
