@@ -123,12 +123,54 @@ async function addPage(doc: PDFDocument): Promise<PDFPage> {
   return doc.addPage([PAGE_W, PAGE_H]);
 }
 
+// --- Photo list builder (même ordre que extractPhotoUrls dans zip-and-send) ---
+// Garantit que photo_001 dans le ZIP = Photo #001 dans l'annexe PDF.
+type PhotoEntry = { index: number; label: string; url: string; hash: string | null };
+
+function buildPhotoList(data: any): PhotoEntry[] {
+  const list: PhotoEntry[] = [];
+  const seen = new Set<string>();
+  let i = 0;
+
+  for (const c of (data.compteurs ?? []) as Array<{ type: string; photo_url?: string; photo_hash?: string }>) {
+    if (c.photo_url && !seen.has(c.photo_url)) {
+      seen.add(c.photo_url);
+      list.push({ index: ++i, label: `Compteur ${c.type}`, url: c.photo_url, hash: c.photo_hash ?? null });
+    }
+  }
+  for (const piece of (data.pieces ?? []) as Array<{ nom: string; photo_url?: string; photo_hash?: string; elements?: Array<{ nom: string; photo_url?: string; photo_hash?: string }> }>) {
+    if (piece.photo_url && !seen.has(piece.photo_url)) {
+      seen.add(piece.photo_url);
+      list.push({ index: ++i, label: `${piece.nom} (vue générale)`, url: piece.photo_url, hash: piece.photo_hash ?? null });
+    }
+    for (const el of (piece.elements ?? [])) {
+      if (el.photo_url && !seen.has(el.photo_url)) {
+        seen.add(el.photo_url);
+        list.push({ index: ++i, label: `${piece.nom} — ${el.nom}`, url: el.photo_url, hash: el.photo_hash ?? null });
+      }
+    }
+  }
+  return list;
+}
+
 // --- Public API ---
 
 export const generateEDL_PDF = async (data: any): Promise<Blob> => {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+  const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
+
+  // ── Identifiant unique et horodatage ──────────────────────────────────────
+  const dtStr = data.metadata.datetime ?? `${data.metadata.date}T00:00:00Z`;
+  const dt = new Date(dtStr);
+  const dateDisplay = dt.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const timeDisplay = dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const dateTimeLabel = `${dateDisplay} à ${timeDisplay}`;
+  const rapportId = data.metadata.rapport_id ?? '';
+  const year = dt.getFullYear();
+  const shortId = rapportId ? rapportId.replace(/-/g, '').substring(0, 6).toUpperCase() : 'XXXXXX';
+  const edlId = `EDL-${year}-${shortId}`;
 
   let page = await addPage(doc);
   let cursorY = 50; // from top
@@ -143,7 +185,18 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
     font: boldFont,
     color: rgb(0.2, 0.25, 0.35),
   });
-  cursorY += 36;
+  cursorY += 26;
+
+  // Identifiant sous le titre, centré
+  const idWidth = font.widthOfTextAtSize(edlId, 9);
+  page.drawText(edlId, {
+    x: (PAGE_W - idWidth) / 2,
+    y: fromTop(cursorY + 10),
+    size: 9,
+    font,
+    color: rgb(0.5, 0.5, 0.5),
+  });
+  cursorY += 20;
 
   // ── INFOS GÉNÉRALES ────────────────────────────────────────────────────────
   page.drawText('INFORMATIONS GÉNÉRALES', {
@@ -157,10 +210,11 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
 
   const bien = [
     `Adresse : ${data.metadata.adresse_bien}`,
+    data.metadata.lieu_signature ? `Lieu de signature : ${data.metadata.lieu_signature}` : null,
     `Chauffage : ${data.metadata.chauffage}`,
     data.metadata.cadastre ? `Cadastre : ${data.metadata.cadastre}` : null,
     `Clés remises : ${data.metadata.cles}`,
-    `Date : ${data.metadata.date}`,
+    `Date : ${dateTimeLabel}`,
   ].filter(Boolean).join('\n');
 
   const parties = [
@@ -321,6 +375,139 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
     } catch { /* signature absente ou invalide */ }
   }
 
+  // ── MENTION LÉGALE CONTRADICTOIRE ─────────────────────────────────────────
+  cursorY += MAX_SIG_H + 14;
+  if (cursorY > PAGE_H - 60) {
+    page = await addPage(doc);
+    cursorY = 50;
+  }
+
+  page.drawLine({
+    start: { x: MARGIN, y: fromTop(cursorY) },
+    end: { x: PAGE_W - MARGIN, y: fromTop(cursorY) },
+    thickness: 0.5,
+    color: rgb(0.8, 0.8, 0.8),
+  });
+  cursorY += 10;
+
+  const mentionText =
+    'Le présent état des lieux a été établi contradictoirement entre les parties, ' +
+    'qui reconnaissent en avoir reçu un exemplaire.';
+  const mentionWidth = italicFont.widthOfTextAtSize(mentionText, 8);
+  page.drawText(mentionText, {
+    x: (PAGE_W - Math.min(mentionWidth, CONTENT_W)) / 2,
+    y: fromTop(cursorY + 9),
+    size: 8,
+    font: italicFont,
+    color: rgb(0.35, 0.35, 0.35),
+    maxWidth: CONTENT_W,
+  });
+  cursorY += 20;
+
+  // ── ANNEXE PHOTOGRAPHIQUE ─────────────────────────────────────────────────
+  const photoList = buildPhotoList(data);
+  if (photoList.length > 0) {
+    page = await addPage(doc);
+    cursorY = 50;
+
+    page.drawText('ANNEXE PHOTOGRAPHIQUE', {
+      x: MARGIN,
+      y: fromTop(cursorY + 12),
+      size: 12,
+      font: boldFont,
+      color: rgb(0.2, 0.25, 0.35),
+    });
+    cursorY += 24;
+
+    page.drawLine({
+      start: { x: MARGIN, y: fromTop(cursorY) },
+      end: { x: PAGE_W - MARGIN, y: fromTop(cursorY) },
+      thickness: 0.5,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+    cursorY += 10;
+
+    for (const photo of photoList) {
+      if (cursorY > PAGE_H - 60) {
+        page = await addPage(doc);
+        cursorY = 50;
+      }
+      const numStr = `Photo #${String(photo.index).padStart(3, '0')} — ${photo.label}`;
+      page.drawText(numStr, {
+        x: MARGIN,
+        y: fromTop(cursorY + 9),
+        size: 8,
+        font: boldFont,
+        color: rgb(0.15, 0.15, 0.15),
+        maxWidth: CONTENT_W,
+      });
+      cursorY += 12;
+
+      const hashStr = photo.hash ? `SHA-256 : ${photo.hash}` : 'SHA-256 : (non disponible)';
+      page.drawText(hashStr, {
+        x: MARGIN,
+        y: fromTop(cursorY + 9),
+        size: 7,
+        font,
+        color: rgb(0.5, 0.5, 0.5),
+        maxWidth: CONTENT_W,
+      });
+      cursorY += 16;
+    }
+
+    // Renvoi ZIP
+    cursorY += 6;
+    if (cursorY > PAGE_H - 50) {
+      page = await addPage(doc);
+      cursorY = 50;
+    }
+    page.drawLine({
+      start: { x: MARGIN, y: fromTop(cursorY) },
+      end: { x: PAGE_W - MARGIN, y: fromTop(cursorY) },
+      thickness: 0.5,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+    cursorY += 10;
+    page.drawText(
+      'Photos consultables dans le dossier ZIP joint à l\'envoi, via le lien temporaire communiqué par email.',
+      {
+        x: MARGIN,
+        y: fromTop(cursorY + 9),
+        size: 7,
+        font: italicFont,
+        color: rgb(0.5, 0.5, 0.5),
+        maxWidth: CONTENT_W,
+      }
+    );
+  }
+
+  // ── PAGINATION + EN-TÊTE EDL ID (post-génération) ─────────────────────────
+  const allPages = doc.getPages();
+  const totalPages = allPages.length;
+  for (let i = 0; i < totalPages; i++) {
+    const p = allPages[i];
+    const { width } = p.getSize();
+    // "Page X / Y" centré en pied de page
+    const pageLabel = `Page ${i + 1} / ${totalPages}`;
+    const pageLabelW = font.widthOfTextAtSize(pageLabel, 8);
+    p.drawText(pageLabel, {
+      x: (width - pageLabelW) / 2,
+      y: 12,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+    // Identifiant EDL en haut à droite
+    const idW = font.widthOfTextAtSize(edlId, 7);
+    p.drawText(edlId, {
+      x: width - MARGIN - idW,
+      y: PAGE_H - 14,
+      size: 7,
+      font,
+      color: rgb(0.65, 0.65, 0.65),
+    });
+  }
+
   // ── EXPORT ─────────────────────────────────────────────────────────────────
   const pdfBytes = await doc.save();
   return new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
@@ -338,12 +525,19 @@ export const injectHashIntoPDF = async (
   const pages = doc.getPages();
   const lastPage = pages[pages.length - 1];
 
-  lastPage.drawText(`SHA-256 : ${hash}`, {
+  lastPage.drawText(`Empreinte SHA-256 : ${hash}`, {
     x: MARGIN,
-    y: 20, // pied de page
+    y: 38,  // au-dessus de la note (y: 28) et de la pagination (y: 12)
     size: 7,
     font,
     color: rgb(0.5, 0.5, 0.5),
+  });
+  lastPage.drawText('Cette empreinte garantit la non-altération du document original avant injection de la présente ligne.', {
+    x: MARGIN,
+    y: 28,  // entre le hash et la pagination
+    size: 6,
+    font,
+    color: rgb(0.65, 0.65, 0.65),
   });
 
   return doc.save();

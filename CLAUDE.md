@@ -408,6 +408,8 @@ eIDAS via Yousign, PWA offline complète.
 - [ ] **Acheter un nom de domaine** et le brancher sur Vercel (Settings → Domains).
 - [ ] **Vérifier le domaine dans Resend** (Domains → Add Domain → copier les DNS records) et mettre à jour `RESEND_FROM_EMAIL` dans Vercel ET dans les secrets Supabase (`supabase secrets set RESEND_FROM_EMAIL=...`).
 - [ ] **Configurer Supabase Auth** → Site URL & Redirect URLs avec l'URL Vercel de production au moment de l'étape 6 (Auth Magic Link).
+- [ ] **Compléter le socle Alur dans les pièces** : ajouter électricité (prises/interrupteurs) pour toutes les pièces habitables, plomberie pour les pièces humides, chauffage si présent. Sera traité à l'étape 5 (structure `elements[]` + templates de pièces).
+- [ ] **Brancher `archive_json`** : la colonne existe en DB mais reste vide. À remplir lors de la transition vers `email_delivered` avec une version structurée et allégée du rapport (sans signatures, sans photos haute-def) — servira de base à la future fonctionnalité "EDL de sortie comparatif" (pré-remplissage automatique depuis un EDL d'entrée existant).
 
 ## 🤝 Conventions de travail avec Claude Code
 

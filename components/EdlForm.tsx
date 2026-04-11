@@ -5,7 +5,7 @@ import { User, MapPin, Calendar, ArrowRight, Camera, CheckCircle2, Key } from "l
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
-import { generateEDL_PDF } from '@/lib/pdfGenerator';
+import { generateEDL_PDF, injectHashIntoPDF } from '@/lib/pdfGenerator';
 import type { RapportStatus } from '@/lib/types';
 
 export default function EdlForm() {
@@ -31,17 +31,18 @@ export default function EdlForm() {
         type: "Entrée",
         date: new Date().toISOString().split('T')[0],
         adresse_bien: "",
+        lieu_signature: "",
         isJeanbrun: false,
-        cles: "", 
-        chauffage: "", 
+        cles: "",
+        chauffage: "",
         cadastre: "",
         bailleur: { nom: "", adresse: "", email: "" },
         locataire: { nom: "", email: "" },
         mandataire: { nom: "", entreprise: "" } // Optionnel pour les agences
       },
       compteurs: [
-        { type: "Électricité", index: "", photo_url: "" },
-        { type: "Eau Froide", index: "", photo_url: "" }
+        { type: "Électricité", index: "", photo_url: "", photo_hash: "" },
+        { type: "Eau Froide", index: "", photo_url: "", photo_hash: "" }
       ],
       pieces: [] as any[],
       signatureBailleur: "",
@@ -103,8 +104,8 @@ export default function EdlForm() {
     // };
 
     // 1. FONCTION UNIVERSELLE D'UPLOAD (Côté Supabase)
-    const uploadToSupabase = async (file: File, folder: string) => {
-      // A. Options de compression
+    // Retourne { url, hash } où hash = SHA-256 hex du fichier compressé (même octets que dans le ZIP)
+    const uploadToSupabase = async (file: File, folder: string): Promise<{ url: string; hash: string } | null> => {
       const options = {
         maxSizeMB: 2,
         maxWidthOrHeight: 2000,
@@ -113,10 +114,15 @@ export default function EdlForm() {
       };
 
       try {
-        // B. Compression
         const compressedFile = await imageCompression(file, options);
-        
-        // C. Upload du fichier compressé
+
+        // Hash SHA-256 du fichier compressé (avant upload)
+        const arrayBuf = await compressedFile.arrayBuffer();
+        const hashBuf = await crypto.subtle.digest('SHA-256', arrayBuf);
+        const hash = Array.from(new Uint8Array(hashBuf))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+
         const fileName = `${Math.random()}.jpg`;   // toujours .jpg — cohérent avec fileType
         const filePath = `${folder}/${fileName}`;
 
@@ -130,7 +136,7 @@ export default function EdlForm() {
           .from('photos-etats-des-lieux')
           .getPublicUrl(filePath);
 
-        return publicUrl;
+        return { url: publicUrl, hash };
       } catch (error) {
         console.error("Erreur compression/upload:", error);
         return null;
@@ -138,7 +144,16 @@ export default function EdlForm() {
     };
 
     // 2. SAUVEGARDE DU RAPPORT — machine à états : draft → pdf_generated → email_sent
-    const saveRapport = async (updatedData: any) => {
+    const saveRapport = async (data: any) => {
+      // Capturer le timestamp exact de clôture (heure de signature)
+      const updatedData = {
+        ...data,
+        metadata: {
+          ...data.metadata,
+          datetime: new Date().toISOString(),
+        },
+      };
+
       try {
         // 1. INSERT brouillon en DB pour obtenir l'ID tôt
         const { data: insertData, error: insertError } = await supabase
@@ -159,15 +174,28 @@ export default function EdlForm() {
         const id = insertData.id as string;
         setRapportId(id);
 
-        // 2. GÉNÉRER LE PDF
+        // 2. GÉNÉRER LE PDF — première passe, avec rapport_id injecté dans les métadonnées
         console.log("Génération du PDF en cours...");
-        const pdfBlob = await generateEDL_PDF(updatedData);
+        const finalData = {
+          ...updatedData,
+          metadata: { ...updatedData.metadata, rapport_id: id },
+        };
+        const pdfBlob = await generateEDL_PDF(finalData);
 
-        // 3. UPLOADER LE PDF
+        // 2b. Calculer le SHA-256 du PDF et l'injecter dans le pied de page
+        const pdfBytes = new Uint8Array(await pdfBlob.arrayBuffer());
+        const hashBuf = await crypto.subtle.digest('SHA-256', pdfBytes);
+        const pdfHash = Array.from(new Uint8Array(hashBuf))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+        const finalPdfBytes = await injectHashIntoPDF(pdfBytes, pdfHash);
+        console.log(`PDF SHA-256 : ${pdfHash} — taille finale : ${finalPdfBytes.length} octets`);
+
+        // 3. UPLOADER LE PDF (avec hash injecté)
         const fileName = `rapport_${id}.pdf`;
         const { error: storageError } = await supabase.storage
           .from('rapports-finaux')
-          .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true });
+          .upload(fileName, finalPdfBytes, { contentType: 'application/pdf', upsert: true });
 
         if (storageError) throw new Error("Erreur Storage: " + storageError.message);
 
@@ -309,12 +337,23 @@ export default function EdlForm() {
               
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Adresse du bien loué</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Ex: 15 rue de Rivoli, 75001 Paris"
                   className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
                   value={formData.metadata.adresse_bien}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, adresse_bien: e.target.value}})}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Lieu de signature</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Paris 11e (identique à l'adresse si signé sur place)"
+                  className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.metadata.lieu_signature}
+                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, lieu_signature: e.target.value}})}
                 />
               </div>
             </div>
@@ -449,10 +488,10 @@ export default function EdlForm() {
                   <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const url = await uploadToSupabase(file, "compteurs");
-                      if (url) {
+                      const result = await uploadToSupabase(file, "compteurs");
+                      if (result) {
                         const newCompteurs = [...formData.compteurs];
-                        newCompteurs[0].photo_url = url;
+                        newCompteurs[0] = { ...newCompteurs[0], photo_url: result.url, photo_hash: result.hash };
                         setFormData({...formData, compteurs: newCompteurs});
                       }
                     }
@@ -493,10 +532,10 @@ export default function EdlForm() {
                   <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const url = await uploadToSupabase(file, "compteurs");
-                      if (url) {
+                      const result = await uploadToSupabase(file, "compteurs");
+                      if (result) {
                         const newCompteurs = [...formData.compteurs];
-                        newCompteurs[1].photo_url = url;
+                        newCompteurs[1] = { ...newCompteurs[1], photo_url: result.url, photo_hash: result.hash };
                         setFormData({...formData, compteurs: newCompteurs});
                       }
                     }
@@ -549,10 +588,10 @@ export default function EdlForm() {
                           onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
-                            const url = await uploadToSupabase(file, "pieces");
-                            if (url) {
+                            const result = await uploadToSupabase(file, "pieces");
+                            if (result) {
                               const newPieces = [...formData.pieces];
-                              newPieces[pIndex].photo_url = url;
+                              newPieces[pIndex] = { ...newPieces[pIndex], photo_url: result.url, photo_hash: result.hash };
                               setFormData({...formData, pieces: newPieces});
                             }
                           }} 
@@ -585,10 +624,14 @@ export default function EdlForm() {
                                     onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
-                                      const url = await uploadToSupabase(file, "degats");
-                                      if (url) {
+                                      const result = await uploadToSupabase(file, "degats");
+                                      if (result) {
                                         const newPieces = [...formData.pieces];
-                                        newPieces[pIndex].elements[eIndex].photo_url = url;
+                                        newPieces[pIndex].elements[eIndex] = {
+                                          ...newPieces[pIndex].elements[eIndex],
+                                          photo_url: result.url,
+                                          photo_hash: result.hash,
+                                        };
                                         setFormData({...formData, pieces: newPieces});
                                       }
                                     }} 
