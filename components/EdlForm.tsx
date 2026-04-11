@@ -585,8 +585,7 @@ export default function EdlForm() {
                           type="file"
                           className="hidden"
                           accept="image/*"
-                          capture="environment"
-                          onChange={async (e) => {
+                                                    onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
                             const result = await uploadToSupabase(file, "pieces");
@@ -621,8 +620,7 @@ export default function EdlForm() {
                                   <Camera size={12} />
                                   {el.photo_url ? "Photo Preuve OK" : "Ajouter preuve"}
                                   <input
-                                    type="file" className="hidden" accept="image/*" capture="environment"
-                                    onChange={async (e) => {
+                                    type="file" className="hidden" accept="image/*"                                     onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
                                       const result = await uploadToSupabase(file, "degats");
