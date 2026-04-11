@@ -4,7 +4,6 @@
 // then sends emails to both bailleur and locataire via Resend.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { Image } from 'https://deno.land/x/imagescript@1.2.15/mod.ts';
 // @ts-ignore — JSZip has no Deno types but works fine via npm:
 import JSZip from 'npm:jszip@3';
 
@@ -47,21 +46,13 @@ function parseStorageUrl(url: string): { bucket: string; path: string } | null {
   return { bucket: match[1], path: match[2] };
 }
 
-// Download a photo, resize to max 2000×2000, re-encode as JPEG quality 85.
+// Photos are pre-compressed client-side (≤1600px, ≤800Ko, JPEG) — no server processing needed.
 // Returns { bytes } on success or { error } on failure — never swallows silently.
-async function compressPhoto(url: string): Promise<{ bytes: Uint8Array } | { error: string }> {
+async function fetchPhoto(url: string): Promise<{ bytes: Uint8Array } | { error: string }> {
   try {
     const res = await fetch(url);
     if (!res.ok) return { error: `HTTP ${res.status} ${res.statusText}` };
-    const raw = new Uint8Array(await res.arrayBuffer());
-    const img = await Image.decode(raw);
-    // Skip resize si déjà assez petit (gain CPU majeur sur photos déjà compressées côté client)
-    if (img.width > 2000 || img.height > 2000) {
-      img.resize(2000, Image.RESIZE_AUTO);
-    } else {
-      console.log(`[photo] skip resize (${img.width}x${img.height})`);
-    }
-    const bytes = await img.encodeJPEG(85);
+    const bytes = new Uint8Array(await res.arrayBuffer());
     return { bytes };
   } catch (e) {
     return { error: String(e) };
@@ -222,7 +213,7 @@ Deno.serve(async (req: Request) => {
     for (const [i, url] of photoUrls.entries()) {
       const fileName = `photo_${String(i + 1).padStart(3, '0')}.jpg`;
       console.log(`[photo ${i + 1}/${photoUrls.length}] processing → ${fileName} | src: ${url}`);
-      const result = await compressPhoto(url);
+      const result = await fetchPhoto(url);
       if ('bytes' in result) {
         zip.file(fileName, result.bytes);
         console.log(`[photo ${i + 1}/${photoUrls.length}] OK — ${result.bytes.length} bytes`);

@@ -1,12 +1,62 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { User, MapPin, Calendar, ArrowRight, Camera, CheckCircle2, Key } from "lucide-react";
+import { User, MapPin, Calendar, ArrowRight, CheckCircle2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
 import { generateEDL_PDF, injectHashIntoPDF } from '@/lib/pdfGenerator';
 import type { RapportStatus } from '@/lib/types';
+
+// Sélecteur photo universel : deux boutons côte à côte (Caméra / Galerie)
+// État uploading : spinner disabled. État hasPhoto : bouton vert unique.
+function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto }: {
+  onPhotoSelected: (file: File) => Promise<void>;
+  isUploading: boolean;
+  hasPhoto: boolean;
+}) {
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) await onPhotoSelected(file);
+    e.target.value = '';
+  };
+
+  if (hasPhoto) return (
+    <button type="button" onClick={() => cameraRef.current?.click()}
+      className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-xl text-xs font-bold">
+      <CheckCircle2 size={14} /> Photo OK
+      <input ref={cameraRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={handleChange} />
+    </button>
+  );
+
+  if (isUploading) return (
+    <div className="grid grid-cols-2 gap-2 min-w-[140px]">
+      {[0, 1].map(i => (
+        <div key={i} className="flex items-center justify-center p-2 bg-slate-200 rounded-xl">
+          <div className="w-3 h-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="grid grid-cols-2 gap-2 min-w-[140px]">
+      <input ref={cameraRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={handleChange} />
+      <input ref={galleryRef} type="file" className="hidden" accept="image/*" onChange={handleChange} />
+      <button type="button" onClick={() => cameraRef.current?.click()}
+        className="flex items-center justify-center gap-1 p-2 bg-slate-900 text-white rounded-xl text-[11px] font-bold hover:bg-slate-700 transition">
+        📷 Caméra
+      </button>
+      <button type="button" onClick={() => galleryRef.current?.click()}
+        className="flex items-center justify-center gap-1 p-2 bg-white border border-slate-300 text-slate-700 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">
+        🖼 Galerie
+      </button>
+    </div>
+  );
+}
 
 export default function EdlForm() {
     const [step, setStep] = useState(1);
@@ -21,6 +71,8 @@ export default function EdlForm() {
     const [resendLocataireEmail, setResendLocataireEmail] = useState('');
     const [resendSent, setResendSent] = useState(false);
     const [isResending, setIsResending] = useState(false);
+    // Clé de l'emplacement photo en cours d'upload (ex: 'c0', 'c1', 'p2', 'e1-0')
+    const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
     // États pour stocker les aperçus des photos
     const [elecPhoto, setElecPhoto] = useState<string | null>(null);
@@ -441,21 +493,20 @@ export default function EdlForm() {
                     setFormData({...formData, compteurs: newCompteurs});
                   }}
                 />
-                <label title="Vous pouvez prendre une photo du compteur d'éléctricité comme preuve irréfutable" 
-                className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[0].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
-                  {formData.compteurs[0].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const result = await uploadToSupabase(file, "compteurs");
-                      if (result) {
-                        const newCompteurs = [...formData.compteurs];
-                        newCompteurs[0] = { ...newCompteurs[0], photo_url: result.url, photo_hash: result.hash };
-                        setFormData({...formData, compteurs: newCompteurs});
-                      }
+                <PhotoSelector
+                  hasPhoto={!!formData.compteurs[0].photo_url}
+                  isUploading={uploadingKey === 'c0'}
+                  onPhotoSelected={async (file) => {
+                    setUploadingKey('c0');
+                    const result = await uploadToSupabase(file, "compteurs");
+                    if (result) {
+                      const newCompteurs = [...formData.compteurs];
+                      newCompteurs[0] = { ...newCompteurs[0], photo_url: result.url, photo_hash: result.hash };
+                      setFormData({...formData, compteurs: newCompteurs});
                     }
-                  }} />
-                </label>
+                    setUploadingKey(null);
+                  }}
+                />
               </div>
 
               {/* Preview Élec */}
@@ -485,21 +536,20 @@ export default function EdlForm() {
                     setFormData({...formData, compteurs: newCompteurs});
                   }}
                 />
-                <label title="Vous pouvez prendre une photo du compteur d'eau comme preuve irréfutable" 
-                className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[1].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
-                  {formData.compteurs[1].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const result = await uploadToSupabase(file, "compteurs");
-                      if (result) {
-                        const newCompteurs = [...formData.compteurs];
-                        newCompteurs[1] = { ...newCompteurs[1], photo_url: result.url, photo_hash: result.hash };
-                        setFormData({...formData, compteurs: newCompteurs});
-                      }
+                <PhotoSelector
+                  hasPhoto={!!formData.compteurs[1].photo_url}
+                  isUploading={uploadingKey === 'c1'}
+                  onPhotoSelected={async (file) => {
+                    setUploadingKey('c1');
+                    const result = await uploadToSupabase(file, "compteurs");
+                    if (result) {
+                      const newCompteurs = [...formData.compteurs];
+                      newCompteurs[1] = { ...newCompteurs[1], photo_url: result.url, photo_hash: result.hash };
+                      setFormData({...formData, compteurs: newCompteurs});
                     }
-                  }} />
-                </label>
+                    setUploadingKey(null);
+                  }}
+                />
               </div>
 
               {/* Preview Eau */}
@@ -537,25 +587,20 @@ export default function EdlForm() {
                     <div key={pIndex} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
                         <span className="font-bold text-slate-800 uppercase text-sm tracking-wide">{piece.nom}</span>
-                        <label className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition ${piece.photo_url ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white'}`}>
-                        <Camera size={14} />
-                        {piece.photo_url ? "Photo OK" : "Photo Pièce"}
-                        <input
-                          type="file"
-                          className="hidden"
-                          accept="image/*"
-                                                    onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
+                        <PhotoSelector
+                          hasPhoto={!!piece.photo_url}
+                          isUploading={uploadingKey === `p${pIndex}`}
+                          onPhotoSelected={async (file) => {
+                            setUploadingKey(`p${pIndex}`);
                             const result = await uploadToSupabase(file, "pieces");
                             if (result) {
                               const newPieces = [...formData.pieces];
                               newPieces[pIndex] = { ...newPieces[pIndex], photo_url: result.url, photo_hash: result.hash };
                               setFormData({...formData, pieces: newPieces});
                             }
-                          }} 
+                            setUploadingKey(null);
+                          }}
                         />
-                      </label>
                         <button 
                         onClick={() => {
                             const newPieces = formData.pieces.filter((_, i) => i !== pIndex);
@@ -575,26 +620,24 @@ export default function EdlForm() {
                               
                               {/* Bouton Photo de dégradation - Apparaît si l'état est moyen ou mauvais */}
                               {el.etat !== "Très bon état" && (
-                                <label className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition ${el.photo_url ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-                                  <Camera size={12} />
-                                  {el.photo_url ? "Photo Preuve OK" : "Ajouter preuve"}
-                                  <input
-                                    type="file" className="hidden" accept="image/*"                                     onChange={async (e) => {
-                                      const file = e.target.files?.[0];
-                                      if (!file) return;
-                                      const result = await uploadToSupabase(file, "degats");
-                                      if (result) {
-                                        const newPieces = [...formData.pieces];
-                                        newPieces[pIndex].elements[eIndex] = {
-                                          ...newPieces[pIndex].elements[eIndex],
-                                          photo_url: result.url,
-                                          photo_hash: result.hash,
-                                        };
-                                        setFormData({...formData, pieces: newPieces});
-                                      }
-                                    }} 
-                                  />
-                                </label>
+                                <PhotoSelector
+                                  hasPhoto={!!el.photo_url}
+                                  isUploading={uploadingKey === `e${pIndex}-${eIndex}`}
+                                  onPhotoSelected={async (file) => {
+                                    setUploadingKey(`e${pIndex}-${eIndex}`);
+                                    const result = await uploadToSupabase(file, "degats");
+                                    if (result) {
+                                      const newPieces = [...formData.pieces];
+                                      newPieces[pIndex].elements[eIndex] = {
+                                        ...newPieces[pIndex].elements[eIndex],
+                                        photo_url: result.url,
+                                        photo_hash: result.hash,
+                                      };
+                                      setFormData({...formData, pieces: newPieces});
+                                    }
+                                    setUploadingKey(null);
+                                  }}
+                                />
                               )}
                             </div>
 
