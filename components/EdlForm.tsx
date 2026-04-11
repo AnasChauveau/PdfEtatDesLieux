@@ -33,7 +33,7 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto }: {
   );
 
   if (isUploading) return (
-    <div className="grid grid-cols-2 gap-2 min-w-[140px]">
+    <div className="grid grid-cols-2 gap-1.5 shrink-0">
       {[0, 1].map(i => (
         <div key={i} className="flex items-center justify-center p-2 bg-slate-200 rounded-xl">
           <div className="w-3 h-3 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
@@ -43,15 +43,15 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto }: {
   );
 
   return (
-    <div className="grid grid-cols-2 gap-2 min-w-[140px]">
+    <div className="grid grid-cols-2 gap-1.5 shrink-0">
       <input ref={cameraRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={handleChange} />
       <input ref={galleryRef} type="file" className="hidden" accept="image/*" onChange={handleChange} />
       <button type="button" onClick={() => cameraRef.current?.click()}
-        className="flex items-center justify-center gap-1 p-2 bg-slate-900 text-white rounded-xl text-[11px] font-bold hover:bg-slate-700 transition">
+        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-slate-900 text-white rounded-xl text-[11px] font-bold hover:bg-slate-700 transition">
         📷 Caméra
       </button>
       <button type="button" onClick={() => galleryRef.current?.click()}
-        className="flex items-center justify-center gap-1 p-2 bg-white border border-slate-300 text-slate-700 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">
+        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-xl text-[11px] font-bold hover:bg-slate-50 transition">
         🖼 Galerie
       </button>
     </div>
@@ -86,6 +86,7 @@ export default function EdlForm() {
         lieu_signature: "",
         isJeanbrun: false,
         cles: "",
+        autres_acces: "",
         chauffage: "",
         cadastre: "",
         bailleur: { nom: "", adresse: "", email: "" },
@@ -323,7 +324,7 @@ export default function EdlForm() {
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Type d'acte</label>
                   <select 
@@ -425,14 +426,14 @@ export default function EdlForm() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <input 
-                  type="number" placeholder="Nb de clés" 
+              <div className="grid grid-cols-[1fr_2fr] gap-3">
+                <input
+                  type="number" placeholder="Nb clés"
                   className="p-3 rounded-xl border border-white bg-white shadow-sm"
                   value={formData.metadata.cles}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cles: e.target.value}})}
                 />
-                <select 
+                <select
                   className="p-3 rounded-xl border border-white bg-white shadow-sm"
                   value={formData.metadata.chauffage}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, chauffage: e.target.value}})}
@@ -443,6 +444,13 @@ export default function EdlForm() {
                   <option>Collectif</option>
                 </select>
               </div>
+              <input
+                type="text"
+                placeholder="Autres accès remis (optionnel) : ex. 1 badge immeuble, 1 bip garage, 1 clé boîte aux lettres"
+                className="w-full p-3 rounded-xl border border-white bg-white shadow-sm text-sm"
+                value={formData.metadata.autres_acces}
+                onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, autres_acces: e.target.value}})}
+              />
 
               {/* Cadastre obligatoire SEULEMENT si Jeanbrun coché */}
               <input 
@@ -482,10 +490,10 @@ export default function EdlForm() {
                 {!formData.compteurs[0].index && <span className="text-[10px] text-red-500 font-bold uppercase">Requis</span>}
               </div>
               
-              <div className="flex gap-2">
-                <input 
-                  type="number" placeholder="Index kWh" 
-                  className="flex-1 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              <div className="flex gap-2 min-w-0">
+                <input
+                  type="number" placeholder="Index kWh"
+                  className="flex-1 min-w-0 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   value={formData.compteurs[0].index}
                   onChange={(e) => {
                     const newCompteurs = [...formData.compteurs];
@@ -525,10 +533,10 @@ export default function EdlForm() {
                 {!formData.compteurs[1].index && <span className="text-[10px] text-red-500 font-bold uppercase">Requis</span>}
               </div>
 
-              <div className="flex gap-2">
-                <input 
-                  type="number" placeholder="Index m³" 
-                  className="flex-1 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              <div className="flex gap-2 min-w-0">
+                <input
+                  type="number" placeholder="Index m³"
+                  className="flex-1 min-w-0 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   value={formData.compteurs[1].index}
                   onChange={(e) => {
                     const newCompteurs = [...formData.compteurs];
@@ -585,31 +593,33 @@ export default function EdlForm() {
                 <div className="space-y-4">
                 {formData.pieces.map((piece: any, pIndex: number) => (
                     <div key={pIndex} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                    <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
                         <span className="font-bold text-slate-800 uppercase text-sm tracking-wide">{piece.nom}</span>
-                        <PhotoSelector
-                          hasPhoto={!!piece.photo_url}
-                          isUploading={uploadingKey === `p${pIndex}`}
-                          onPhotoSelected={async (file) => {
-                            setUploadingKey(`p${pIndex}`);
-                            const result = await uploadToSupabase(file, "pieces");
-                            if (result) {
-                              const newPieces = [...formData.pieces];
-                              newPieces[pIndex] = { ...newPieces[pIndex], photo_url: result.url, photo_hash: result.hash };
+                        <div className="flex items-center justify-between sm:justify-end sm:gap-3">
+                          <PhotoSelector
+                            hasPhoto={!!piece.photo_url}
+                            isUploading={uploadingKey === `p${pIndex}`}
+                            onPhotoSelected={async (file) => {
+                              setUploadingKey(`p${pIndex}`);
+                              const result = await uploadToSupabase(file, "pieces");
+                              if (result) {
+                                const newPieces = [...formData.pieces];
+                                newPieces[pIndex] = { ...newPieces[pIndex], photo_url: result.url, photo_hash: result.hash };
+                                setFormData({...formData, pieces: newPieces});
+                              }
+                              setUploadingKey(null);
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              const newPieces = formData.pieces.filter((_, i) => i !== pIndex);
                               setFormData({...formData, pieces: newPieces});
-                            }
-                            setUploadingKey(null);
-                          }}
-                        />
-                        <button 
-                        onClick={() => {
-                            const newPieces = formData.pieces.filter((_, i) => i !== pIndex);
-                            setFormData({...formData, pieces: newPieces});
-                        }}
-                        className="text-red-500 text-xs font-medium hover:underline"
-                        >
-                        Supprimer la pièce
-                        </button>
+                            }}
+                            className="text-red-500 text-xs font-medium hover:underline"
+                          >
+                            Supprimer la pièce
+                          </button>
+                        </div>
                     </div>
                     
                     <div className="p-4 space-y-6">
@@ -641,9 +651,9 @@ export default function EdlForm() {
                               )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
-                              <select 
-                                className="p-2 rounded-lg border border-slate-200 bg-white text-xs"
+                            <div className="flex gap-2">
+                              <select
+                                className="shrink-0 w-[45%] min-w-0 p-2 rounded-lg border border-slate-200 bg-white text-xs"
                                 value={el.etat}
                                 onChange={(e) => {
                                   const newPieces = [...formData.pieces];
@@ -656,9 +666,9 @@ export default function EdlForm() {
                                 <option>État d'usage</option>
                                 <option>Mauvais état</option>
                               </select>
-                              <input 
+                              <input
                                 type="text" placeholder="Note (ex: tache, rayure...)"
-                                className="p-2 rounded-lg border border-slate-200 bg-slate-50 text-xs"
+                                className="flex-1 min-w-0 p-2 rounded-lg border border-slate-200 bg-slate-50 text-xs"
                                 value={el.observations}
                                 onChange={(e) => {
                                   const newPieces = [...formData.pieces];

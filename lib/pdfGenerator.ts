@@ -214,6 +214,7 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
     `Chauffage : ${data.metadata.chauffage}`,
     data.metadata.cadastre ? `Cadastre : ${data.metadata.cadastre}` : null,
     `Clés remises : ${data.metadata.cles}`,
+    data.metadata.autres_acces ? `Autres accès : ${data.metadata.autres_acces}` : null,
     `Date : ${dateTimeLabel}`,
   ].filter(Boolean).join('\n');
 
