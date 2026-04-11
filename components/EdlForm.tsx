@@ -61,48 +61,6 @@ export default function EdlForm() {
     const sigBailleur = useRef<any>(null);
     const sigLocataire = useRef<any>(null);
 
-    // // 2. GESTIONNAIRE PHOTO ÉLECTRICITÉ
-    // const handlePhotoElec = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    //     const file = e.target.files?.[0];
-    //     if (!file) return;
-
-    //     try {
-    //     const url = await uploadToSupabase(file, "compteurs");
-    //     setElecPhoto(url); // Pour l'affichage immédiat
-    //     // Mise à jour du gros JSON
-    //     setFormData(prev => ({
-    //         ...prev,
-    //         compteurs: prev.compteurs.map(c => c.type === "Électricité" ? { ...c, photo_url: url } : c)
-    //     }));
-    //     } catch (err) {
-    //     alert("Erreur upload électricité");
-    //     }
-    // };
-
-    // // 3. GESTIONNAIRE PHOTO EAU
-    // const handlePhotoEau = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    //     const file = e.target.files?.[0];
-    //     if (!file) return;
-
-    //     try {
-    //     const url = await uploadToSupabase(file, "compteurs");
-    //     setEauPhoto(url); // Pour l'affichage immédiat
-    //     setFormData(prev => ({
-    //         ...prev,
-    //         compteurs: prev.compteurs.map(c => c.type === "Eau Froide" ? { ...c, photo_url: url } : c)
-    //     }));
-    //     } catch (err) {
-    //     alert("Erreur upload eau");
-    //     }
-    // };
-
-    // // 4. Gestion de modification des compteurs
-    // const updateCompteur = (index: number, value: string) => {
-    //   const newCompteurs = [...formData.compteurs]; // On copie le tableau
-    //   newCompteurs[index].index = value; // On modifie juste celui qu'on veut
-    //   setFormData({ ...formData, compteurs: newCompteurs }); // On renvoie le tableau complet
-    // };
-
     // 1. FONCTION UNIVERSELLE D'UPLOAD (Côté Supabase)
     // Retourne { url, hash } où hash = SHA-256 hex du fichier compressé (même octets que dans le ZIP)
     const uploadToSupabase = async (file: File, folder: string): Promise<{ url: string; hash: string } | null> => {
@@ -485,7 +443,7 @@ export default function EdlForm() {
                 <label title="Vous pouvez prendre une photo du compteur d'éléctricité comme preuve irréfutable" 
                 className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[0].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
                   {formData.compteurs[0].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                  <input type="file" className="hidden" accept="image/*" capture="environment" onChange={async (e) => {
+                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const result = await uploadToSupabase(file, "compteurs");
@@ -529,7 +487,7 @@ export default function EdlForm() {
                 <label title="Vous pouvez prendre une photo du compteur d'eau comme preuve irréfutable" 
                 className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[1].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
                   {formData.compteurs[1].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                  <input type="file" className="hidden" accept="image/*" capture="environment" onChange={async (e) => {
+                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const result = await uploadToSupabase(file, "compteurs");
