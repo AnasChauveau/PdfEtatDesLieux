@@ -278,6 +278,22 @@ Un seul cron quotidien (pg_cron ou Edge Function planifiée) gère les 3 règles
 PDF (`rapports-finaux`) et `archive_json` ne sont jamais touchés par ce cron.
 Ils restent jusqu'à `archive_expires_at` (created_at + 9 ans), purgés par un cron séparé.
 
+### 9. Valeur probante cryptographique du PDF et des photos
+
+Le PDF généré contient une empreinte SHA-256 globale (calculée avant injection de la ligne d'empreinte elle-même), et chaque photo de l'annexe photographique est référencée avec son propre hash SHA-256. Le hash photo est calculé **côté client** après compression JPEG, avant upload, sur les mêmes octets que ceux qui finissent dans le ZIP. Cohérence absolue garantie : **hash dans le PDF = hash du fichier dans le ZIP = hash du fichier que le client extrait après dézippage** (le format ZIP ne modifie pas un seul octet des fichiers contenus).
+
+Cette double empreinte (PDF + photos individuelles) constitue le **différenciateur technique principal** de l'app par rapport à la concurrence (Imodirect, Rentila, Smovin). Aucun outil grand public ne propose cette garantie cryptographique aujourd'hui.
+
+### 10. Pédagogie utilisateur : insister sur la conservation du ZIP
+
+La philosophie "Zéro Déchet" implique que les photos originales sont définitivement supprimées 48h après livraison email. Ce choix doit être **explicitement et fermement communiqué** à l'utilisateur à plusieurs endroits du parcours pour éviter qu'il se retrouve sans photos en cas de litige tardif :
+
+- **Dans le mail envoyé** (corps du message) : message d'avertissement clair — "Téléchargez et conservez précieusement ce ZIP, c'est la seule version originale qui sera conservée. Passé 48h les photos seront définitivement supprimées de nos serveurs."
+- **Sur l'écran de succès dans l'app** : renforcer le message actuel pour insister sur l'urgence du téléchargement.
+- **Dans le PDF** (fin de l'annexe photographique) : ajouter "à conserver impérativement par les deux parties" à la mention de renvoi au ZIP.
+
+Cette pédagogie est aussi un argument commercial : on responsabilise l'utilisateur sur ses propres archives, ce qui justifie notre modèle "sans engagement de stockage".
+
 ## 📜 Conformité Loi Alur — éléments obligatoires
 
 Chaque pièce doit inclure **par défaut et de manière non supprimable** (socle Alur) :
@@ -408,8 +424,9 @@ eIDAS via Yousign, PWA offline complète.
 - [ ] **Acheter un nom de domaine** et le brancher sur Vercel (Settings → Domains).
 - [ ] **Vérifier le domaine dans Resend** (Domains → Add Domain → copier les DNS records) et mettre à jour `RESEND_FROM_EMAIL` dans Vercel ET dans les secrets Supabase (`supabase secrets set RESEND_FROM_EMAIL=...`).
 - [ ] **Configurer Supabase Auth** → Site URL & Redirect URLs avec l'URL Vercel de production au moment de l'étape 6 (Auth Magic Link).
-- [ ] **Compléter le socle Alur dans les pièces** : ajouter électricité (prises/interrupteurs) pour toutes les pièces habitables, plomberie pour les pièces humides, chauffage si présent. Sera traité à l'étape 5 (structure `elements[]` + templates de pièces).
-- [ ] **Brancher `archive_json`** : la colonne existe en DB mais reste vide. À remplir lors de la transition vers `email_delivered` avec une version structurée et allégée du rapport (sans signatures, sans photos haute-def) — servira de base à la future fonctionnalité "EDL de sortie comparatif" (pré-remplissage automatique depuis un EDL d'entrée existant).
+- [ ] **Pas d'action sur les signatures base64 dans le JSONB** : analyse faite, le coût (~15 Ko par rapport) est négligeable à l'échelle visée (largement sous la limite gratuite Supabase 500 Mo, soit ~25 000 rapports). Aucun bénéfice utilisateur, risque de régression. À reconsidérer uniquement si dépassement de 10 000 rapports actifs.
+- [ ] **Compléter le socle Alur dans les pièces** : électricité (prises/interrupteurs) sur toutes les pièces habitables, plomberie/sanitaires en pièces humides, chauffage. Sera traité à l'étape 5 de la roadmap (structure `elements[]` + templates).
+- [ ] **Brancher `archive_json`** : la colonne existe (créée à l'étape 1) mais reste vide. À remplir au moment de la transition vers `email_delivered` avec une version structurée et allégée du rapport (pas de signatures base64, pas d'URLs de photos), pour servir de base à la fonction future "EDL de sortie comparatif". Estimation : ~5 lignes de code, à faire au moment de l'étape "EDL de sortie" post-MVP.
 
 ## 🤝 Conventions de travail avec Claude Code
 
@@ -420,9 +437,23 @@ eIDAS via Yousign, PWA offline complète.
 - **Tester la génération PDF** après toute modification de `pdfGenerator.ts`
   en vérifiant que le fichier de sortie reste < 700 Ko.
 - **Préférer les petits commits atomiques** plutôt que les gros refactors d'un
-  coup — Raphaël veut pouvoir suivre et apprendre, pas juste valider.
+  coup — Anas (nom du développeur de cette solution) veut pouvoir suivre et apprendre, pas juste valider.
 - **Parler français** dans les réponses, les commentaires de code peuvent rester
   en anglais (convention standard).
-- Raphaël est à un moment émotionnellement sensible sur ce projet : encourager
+- Anas est à un moment émotionnellement sensible sur ce projet : encourager
   les bonnes décisions déjà prises, être pédagogue, éviter de tout remettre en
   question sans raison forte.
+
+## 💼 Arguments commerciaux à mettre en avant
+
+Ces formulations sont issues de la conversation d'architecture et constituent les angles de différenciation à utiliser sur la future landing page et lors des échanges avec les premiers clients :
+
+**🔒 Sécurité cryptographique** : "Chaque photo et chaque PDF généré est scellé avec une empreinte SHA-256, le standard de cryptographie utilisé par les banques. En cas de litige, vous pouvez prouver mathématiquement qu'aucun document n'a été modifié depuis sa création. Aucun autre outil d'EDL grand public ne propose cela aujourd'hui."
+
+**🌱 Zéro Déchet Numérique** : "Nous ne stockons pas vos photos dans le temps. On capture l'instant T, on produit votre document légal et votre dossier de preuves, on vous livre, et on purge. Vous restez propriétaire de vos archives, pas nous."
+
+**⚡ Vitesse et simplicité** : "15 minutes pour un EDL complet et juridiquement solide, depuis votre téléphone, sur place. Pas d'app à installer, pas d'abonnement, paiement à l'acte."
+
+**📜 Conformité Loi Alur 2026** : "Conçu pour répondre aux obligations renforcées du dispositif Jeanbrun. Toutes les mentions obligatoires sont incluses par défaut, vous ne pouvez pas produire un EDL non-conforme."
+
+Ces arguments doivent être déclinés sur la landing page, dans les CGV, et utilisés tels quels lors des premiers échanges client.
