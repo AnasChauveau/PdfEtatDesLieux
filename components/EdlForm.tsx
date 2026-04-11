@@ -485,7 +485,7 @@ export default function EdlForm() {
                 <label title="Vous pouvez prendre une photo du compteur d'éléctricité comme preuve irréfutable" 
                 className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[0].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
                   {formData.compteurs[0].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
+                  <input type="file" className="hidden" accept="image/*" capture="environment" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const result = await uploadToSupabase(file, "compteurs");
@@ -529,7 +529,7 @@ export default function EdlForm() {
                 <label title="Vous pouvez prendre une photo du compteur d'eau comme preuve irréfutable" 
                 className={`p-3 rounded-xl cursor-pointer transition flex items-center gap-2 ${formData.compteurs[1].photo_url ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}>
                   {formData.compteurs[1].photo_url ? <CheckCircle2 size={20} /> : <Camera size={20} />}
-                  <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
+                  <input type="file" className="hidden" accept="image/*" capture="environment" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const result = await uploadToSupabase(file, "compteurs");
@@ -581,10 +581,11 @@ export default function EdlForm() {
                         <label className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition ${piece.photo_url ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white'}`}>
                         <Camera size={14} />
                         {piece.photo_url ? "Photo OK" : "Photo Pièce"}
-                        <input 
-                          type="file" 
-                          className="hidden" 
-                          accept="image/*" 
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          capture="environment"
                           onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
@@ -619,8 +620,8 @@ export default function EdlForm() {
                                 <label className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition ${el.photo_url ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                                   <Camera size={12} />
                                   {el.photo_url ? "Photo Preuve OK" : "Ajouter preuve"}
-                                  <input 
-                                    type="file" className="hidden" accept="image/*" 
+                                  <input
+                                    type="file" className="hidden" accept="image/*" capture="environment"
                                     onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
@@ -727,7 +728,7 @@ export default function EdlForm() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase text-slate-400">Signature du Bailleur</label>
                     <div className="border-2 border-slate-200 rounded-xl bg-white overflow-hidden">
-                      <SignatureCanvas ref={sigBailleur} canvasProps={{className: "signature-pad-canvas w-full h-48"}} />
+                      <SignatureCanvas ref={sigBailleur} canvasProps={{width: 340, height: 160, style: {maxWidth: '100%'}}} />
                     </div>
                     <button onClick={() => sigBailleur.current.clear()} className="text-[10px] text-slate-400 uppercase">Effacer</button>
                   </div>
@@ -736,7 +737,7 @@ export default function EdlForm() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase text-slate-400">Signature du Locataire</label>
                     <div className="border-2 border-slate-200 rounded-xl bg-white overflow-hidden">
-                      <SignatureCanvas ref={sigLocataire} canvasProps={{className: "signature-pad-canvas w-full h-48"}} />
+                      <SignatureCanvas ref={sigLocataire} canvasProps={{width: 340, height: 160, style: {maxWidth: '100%'}}} />
                     </div>
                     <button onClick={() => sigLocataire.current.clear()} className="text-[10px] text-slate-400 uppercase">Effacer</button>
                   </div>
