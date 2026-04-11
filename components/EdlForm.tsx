@@ -75,8 +75,8 @@ export default function EdlForm() {
     const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
     // États pour stocker les aperçus des photos
-    const [elecPhoto, setElecPhoto] = useState<string | null>(null);
-    const [eauPhoto, setEauPhoto] = useState<string | null>(null);
+    // const [elecPhoto, setElecPhoto] = useState<string | null>(null);
+    // const [eauPhoto, setEauPhoto] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
       metadata: {
