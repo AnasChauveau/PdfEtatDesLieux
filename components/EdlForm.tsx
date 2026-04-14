@@ -111,6 +111,7 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [menuAbove, setMenuAbove] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,6 +132,14 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
     setShowMenu(false);
   };
 
+  const openMenu = () => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setMenuAbove(rect.top > window.innerHeight * 0.35);
+    }
+    setShowMenu(prev => !prev);
+  };
+
   const hiddenInputs = (
     <>
       <input ref={cameraRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={handleChange} />
@@ -138,7 +147,7 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
     </>
   );
 
-  // ── MODE COMPACT (Step 3) ──
+  // ── MODE COMPACT (Step 3) — trigger unique + popup direction auto ──
   if (compact) {
     if (isUploading) return (
       <div className="flex items-center justify-center w-8 h-8 bg-slate-100 rounded-lg shrink-0">
@@ -146,42 +155,39 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
       </div>
     );
 
-    if (hasPhoto) return (
-      <div className="flex items-center gap-1 shrink-0">
-        {hiddenInputs}
-        <button type="button" onClick={() => cameraRef.current?.click()}
-          title="Remplacer (caméra)"
-          className="w-8 h-8 flex items-center justify-center bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-          <Camera size={15} />
+    const compactMenu = (
+      <div className={`absolute right-0 ${menuAbove ? 'bottom-full mb-1' : 'top-full mt-1'} bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-50 w-40`}>
+        <button type="button" onClick={() => { cameraRef.current?.click(); setShowMenu(false); }}
+          className="flex items-center gap-3 w-full px-3 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+          <Camera size={14} className="text-slate-500" /> Caméra
         </button>
-        <button type="button" onClick={() => galleryRef.current?.click()}
-          title="Remplacer (galerie)"
-          className="w-8 h-8 flex items-center justify-center bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition">
-          <ImageIcon size={15} />
+        <div className="h-px bg-slate-100" />
+        <button type="button" onClick={() => { galleryRef.current?.click(); setShowMenu(false); }}
+          className="flex items-center gap-3 w-full px-3 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+          <ImageIcon size={14} className="text-slate-500" /> Galerie
         </button>
         {onPhotoDeleted && (
-          <button type="button" onClick={onPhotoDeleted}
-            title="Supprimer la photo"
-            className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-red-50 hover:text-red-500 transition">
-            <X size={14} />
-          </button>
+          <>
+            <div className="h-px bg-slate-100" />
+            <button type="button" onClick={() => { onPhotoDeleted(); setShowMenu(false); }}
+              className="flex items-center gap-3 w-full px-3 py-2.5 text-xs font-medium text-red-500 hover:bg-red-50 transition">
+              <X size={14} /> Supprimer
+            </button>
+          </>
         )}
       </div>
     );
 
     return (
-      <div className="flex items-center gap-1 shrink-0">
+      <div ref={containerRef} className="relative shrink-0">
         {hiddenInputs}
-        <button type="button" onClick={() => cameraRef.current?.click()}
-          title="Caméra"
-          className="w-8 h-8 flex items-center justify-center bg-slate-900 text-white rounded-lg hover:bg-slate-700 transition">
+        <button type="button" onClick={openMenu}
+          className={`w-8 h-8 flex items-center justify-center rounded-lg transition ${
+            hasPhoto ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-900 text-white hover:bg-slate-700'
+          }`}>
           <Camera size={15} />
         </button>
-        <button type="button" onClick={() => galleryRef.current?.click()}
-          title="Galerie"
-          className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition">
-          <ImageIcon size={15} />
-        </button>
+        {showMenu && compactMenu}
       </div>
     );
   }
@@ -874,6 +880,11 @@ export default function EdlForm() {
                             }
                             setUploadingKey(null);
                           }}
+                          onPhotoDeleted={() => {
+                            const newPieces = [...formData.pieces];
+                            newPieces[pIndex] = { ...newPieces[pIndex], photo_url: undefined, photo_hash: undefined };
+                            setFormData({...formData, pieces: newPieces});
+                          }}
                         />
                         {/* Bouton supprimer — icône seule */}
                         <button
@@ -893,7 +904,7 @@ export default function EdlForm() {
                       {piece.elements.map((el: any, eIndex: number) => (
                         <div key={el.id ?? eIndex} className="py-3 border-b border-slate-50 last:border-0">
 
-                          {/* Label éditable + icône obligatoire/suppression + photo conditionnelle */}
+                          {/* Label + badge obligatoire/suppression */}
                           <div className="flex items-center gap-1.5 mb-2">
                             <input
                               type="text"
@@ -910,8 +921,8 @@ export default function EdlForm() {
                               className="font-bold text-slate-700 text-sm flex-1 min-w-0 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none pb-px rounded-none"
                             />
                             {el.obligatoire ? (
-                              <span className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold">
-                                <Lock size={10} /> Alur
+                              <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 text-slate-400" title="Obligatoire Loi Alur">
+                                <Lock size={11} />
                               </span>
                             ) : (
                               <button
@@ -922,39 +933,9 @@ export default function EdlForm() {
                                 <Trash2 size={12} />
                               </button>
                             )}
-                            {['moyen', 'mauvais', 'hs'].includes(el.etat) && (
-                              <PhotoSelector
-                                compact
-                                hasPhoto={!!el.photo_url}
-                                isUploading={uploadingKey === `e${pIndex}-${eIndex}`}
-                                onPhotoSelected={async (file) => {
-                                  setUploadingKey(`e${pIndex}-${eIndex}`);
-                                  const result = await uploadToSupabase(file, "degats");
-                                  if (result) {
-                                    const newPieces = [...formData.pieces];
-                                    newPieces[pIndex].elements[eIndex] = {
-                                      ...newPieces[pIndex].elements[eIndex],
-                                      photo_url: result.url,
-                                      photo_hash: result.hash,
-                                    };
-                                    setFormData({ ...formData, pieces: newPieces });
-                                  }
-                                  setUploadingKey(null);
-                                }}
-                                onPhotoDeleted={() => {
-                                  const newPieces = [...formData.pieces];
-                                  newPieces[pIndex].elements[eIndex] = {
-                                    ...newPieces[pIndex].elements[eIndex],
-                                    photo_url: undefined,
-                                    photo_hash: undefined,
-                                  };
-                                  setFormData({ ...formData, pieces: newPieces });
-                                }}
-                              />
-                            )}
                           </div>
 
-                          {/* État + observations — empilés sur très petit écran */}
+                          {/* État + observations + photo (si dégradé) */}
                           <div className="flex flex-col min-[550px]:flex-row gap-1.5">
                             <select
                               className={`w-full min-[350px]:w-[45%] shrink-0 p-2 rounded-lg border text-xs ${
@@ -1004,6 +985,36 @@ export default function EdlForm() {
                                 setFormData({ ...formData, pieces: newPieces });
                               }}
                             />
+                            {['moyen', 'mauvais', 'hs'].includes(el.etat) && (
+                              <PhotoSelector
+                                compact
+                                hasPhoto={!!el.photo_url}
+                                isUploading={uploadingKey === `e${pIndex}-${eIndex}`}
+                                onPhotoSelected={async (file) => {
+                                  setUploadingKey(`e${pIndex}-${eIndex}`);
+                                  const result = await uploadToSupabase(file, "degats");
+                                  if (result) {
+                                    const newPieces = [...formData.pieces];
+                                    newPieces[pIndex].elements[eIndex] = {
+                                      ...newPieces[pIndex].elements[eIndex],
+                                      photo_url: result.url,
+                                      photo_hash: result.hash,
+                                    };
+                                    setFormData({ ...formData, pieces: newPieces });
+                                  }
+                                  setUploadingKey(null);
+                                }}
+                                onPhotoDeleted={() => {
+                                  const newPieces = [...formData.pieces];
+                                  newPieces[pIndex].elements[eIndex] = {
+                                    ...newPieces[pIndex].elements[eIndex],
+                                    photo_url: undefined,
+                                    photo_hash: undefined,
+                                  };
+                                  setFormData({ ...formData, pieces: newPieces });
+                                }}
+                              />
+                            )}
                           </div>
 
                         </div>
