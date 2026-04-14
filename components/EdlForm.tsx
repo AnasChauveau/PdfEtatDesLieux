@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock } from "lucide-react";
+import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
@@ -35,7 +35,7 @@ function makeElement(t: ElementTemplate): PieceElement {
     kind: t.kind,
     label: t.label,
     obligatoire: t.obligatoire,
-    etat: 'bon',
+    etat: null,
     observations: '',
     meta: {},
   };
@@ -101,11 +101,12 @@ function AddEquipmentRow({ onAdd }: { onAdd: (kind: ElementKind, label: string) 
 
 // ── Composant PhotoSelector ───────────────────────────────────────────────────
 
-function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false }: {
+function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false, onPhotoDeleted }: {
   onPhotoSelected: (file: File) => Promise<void>;
   isUploading: boolean;
   hasPhoto: boolean;
   compact?: boolean;
+  onPhotoDeleted?: () => void;
 }) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -158,6 +159,13 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
           className="w-8 h-8 flex items-center justify-center bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition">
           <ImageIcon size={15} />
         </button>
+        {onPhotoDeleted && (
+          <button type="button" onClick={onPhotoDeleted}
+            title="Supprimer la photo"
+            className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-red-50 hover:text-red-500 transition">
+            <X size={14} />
+          </button>
+        )}
       </div>
     );
 
@@ -222,6 +230,19 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
   );
 }
 
+// Extrait le chemin relatif depuis une URL publique Supabase Storage
+function extractStoragePath(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const marker = '/object/public/photos-etats-des-lieux/';
+    const idx = u.pathname.indexOf(marker);
+    if (idx === -1) return null;
+    return decodeURIComponent(u.pathname.slice(idx + marker.length));
+  } catch {
+    return null;
+  }
+}
+
 export default function EdlForm() {
     const [step, setStep] = useState(1);
     const [rapportId, setRapportId] = useState<string | null>(null);
@@ -237,6 +258,14 @@ export default function EdlForm() {
     const [isResending, setIsResending] = useState(false);
     // Clé de l'emplacement photo en cours d'upload (ex: 'c0', 'c1', 'p2', 'e1-0')
     const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+    // Modale revert photo (état qui redevient "non dégradé" alors qu'une photo existe)
+    const [photoRevertModal, setPhotoRevertModal] = useState<{
+      pIndex: number; eIndex: number; newEtat: string | null; elementId: string;
+    } | null>(null);
+    // IDs des éléments déjà alertés dans cette session (une seule alerte par élément)
+    const [alertedPhotoElements, setAlertedPhotoElements] = useState<Set<string>>(new Set());
+    // Modale non-conformité Alur avant étape 5
+    const [showAlurModal, setShowAlurModal] = useState(false);
 
     // États pour stocker les aperçus des photos
     // const [elecPhoto, setElecPhoto] = useState<string | null>(null);
@@ -498,6 +527,19 @@ export default function EdlForm() {
           .filter((el: any) => el.obligatoire)
           .every((el: any) => el.etat !== null && el.etat !== undefined)
       );
+
+    // Liste des éléments obligatoires non renseignés (pour la modale d'avertissement)
+    const getMissingAlurElements = (): Array<{ pieceName: string; elementLabel: string }> => {
+      const missing: Array<{ pieceName: string; elementLabel: string }> = [];
+      formData.pieces.forEach((piece: any) => {
+        (piece.elements ?? []).forEach((el: any) => {
+          if (el.obligatoire && (el.etat === null || el.etat === undefined)) {
+            missing.push({ pieceName: piece.nom, elementLabel: el.label ?? el.nom ?? '?' });
+          }
+        });
+      });
+      return missing;
+    };
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
@@ -868,8 +910,8 @@ export default function EdlForm() {
                               className="font-bold text-slate-700 text-sm flex-1 min-w-0 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none pb-px rounded-none"
                             />
                             {el.obligatoire ? (
-                              <span title="Obligatoire Loi Alur" className="shrink-0">
-                                <Lock size={11} className="text-slate-300" />
+                              <span className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold">
+                                <Lock size={10} /> Alur
                               </span>
                             ) : (
                               <button
@@ -899,6 +941,15 @@ export default function EdlForm() {
                                   }
                                   setUploadingKey(null);
                                 }}
+                                onPhotoDeleted={() => {
+                                  const newPieces = [...formData.pieces];
+                                  newPieces[pIndex].elements[eIndex] = {
+                                    ...newPieces[pIndex].elements[eIndex],
+                                    photo_url: undefined,
+                                    photo_hash: undefined,
+                                  };
+                                  setFormData({ ...formData, pieces: newPieces });
+                                }}
                               />
                             )}
                           </div>
@@ -906,18 +957,33 @@ export default function EdlForm() {
                           {/* État + observations — empilés sur très petit écran */}
                           <div className="flex flex-col min-[550px]:flex-row gap-1.5">
                             <select
-                              className="w-full min-[350px]:w-[45%] shrink-0 p-2 rounded-lg border border-slate-200 bg-white text-xs"
+                              className={`w-full min-[350px]:w-[45%] shrink-0 p-2 rounded-lg border text-xs ${
+                                !el.etat
+                                  ? el.obligatoire
+                                    ? 'border-red-400 bg-red-50'
+                                    : 'border-orange-400 bg-orange-50'
+                                  : 'border-slate-200 bg-white'
+                              }`}
                               value={el.etat ?? ''}
                               onChange={(e) => {
+                                const newEtat = e.target.value || null;
+                                const currentEl = formData.pieces[pIndex].elements[eIndex];
+                                const hasPhoto = !!currentEl.photo_url;
+                                const notDegraded = newEtat && !['moyen', 'mauvais', 'hs'].includes(newEtat);
+                                const alreadyAlerted = alertedPhotoElements.has(currentEl.id);
+                                if (hasPhoto && notDegraded && !alreadyAlerted) {
+                                  setPhotoRevertModal({ pIndex, eIndex, newEtat, elementId: currentEl.id });
+                                  return;
+                                }
                                 const newPieces = [...formData.pieces];
                                 newPieces[pIndex].elements[eIndex] = {
                                   ...newPieces[pIndex].elements[eIndex],
-                                  etat: e.target.value || null,
+                                  etat: newEtat,
                                 };
                                 setFormData({ ...formData, pieces: newPieces });
                               }}
                             >
-                              <option value="">— État —</option>
+                              <option value="">À évaluer</option>
                               <option value="neuf">{ETAT_LABELS.neuf}</option>
                               <option value="tres_bon">{ETAT_LABELS.tres_bon}</option>
                               <option value="bon">{ETAT_LABELS.bon}</option>
@@ -956,8 +1022,7 @@ export default function EdlForm() {
               {/* Badge Alur */}
               {isAlurCompliant() && (
                 <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-xs font-bold">
-                  <CheckCircle2 size={14} />
-                  ✓ Conforme Loi Alur — tous les éléments obligatoires sont renseignés
+                  ✓ Conforme Loi Alur - tous les éléments obligatoires sont renseignés
                 </div>
               )}
 
@@ -1001,7 +1066,13 @@ export default function EdlForm() {
                   Retour
                 </button>
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => {
+                    if (formData.pieces.length > 0 && !isAlurCompliant()) {
+                      setShowAlurModal(true);
+                    } else {
+                      setStep(4);
+                    }
+                  }}
                   disabled={formData.pieces.length === 0}
                   className={`flex-[2] py-3.5 rounded-xl font-bold text-sm transition ${
                     formData.pieces.length > 0 ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-200 text-slate-400'
@@ -1253,6 +1324,112 @@ export default function EdlForm() {
               </div>
             )}
       </div>
+
+      {/* ── Modale : photo revert (état redevient non-dégradé alors qu'une photo existe) ── */}
+      {photoRevertModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
+            <h3 className="font-bold text-slate-900 text-sm">L&apos;élément n&apos;est plus dégradé</h3>
+            <p className="text-xs text-slate-500">
+              Une photo avait été prise pour cet élément. Est-elle toujours pertinente ?
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  // Garder la photo — on met juste à jour l'état
+                  const newPieces = [...formData.pieces];
+                  newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex] = {
+                    ...newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex],
+                    etat: photoRevertModal.newEtat,
+                  };
+                  setFormData({ ...formData, pieces: newPieces });
+                  setAlertedPhotoElements(prev => new Set(prev).add(photoRevertModal.elementId));
+                  setPhotoRevertModal(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-50 transition"
+              >
+                Garder
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = formData.pieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex];
+                  // Purge bucket — fire & forget, ne bloque pas l'UX
+                  if (el.photo_url) {
+                    const path = extractStoragePath(el.photo_url);
+                    if (path) {
+                      supabase.storage.from('photos-etats-des-lieux').remove([path])
+                        .then(({ error }) => { if (error) console.warn('Photo cleanup failed:', error.message); });
+                    }
+                  }
+                  const newPieces = [...formData.pieces];
+                  newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex] = {
+                    ...newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex],
+                    etat: photoRevertModal.newEtat,
+                    photo_url: undefined,
+                    photo_hash: undefined,
+                  };
+                  setFormData({ ...formData, pieces: newPieces });
+                  setAlertedPhotoElements(prev => new Set(prev).add(photoRevertModal.elementId));
+                  setPhotoRevertModal(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale : non-conformité Alur avant étape 5 ── */}
+      {showAlurModal && (() => {
+        const missing = getMissingAlurElements();
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center shrink-0 text-lg">⚠️</div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">EDL non conforme Loi Alur</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {missing.length} élément{missing.length > 1 ? 's' : ''} obligatoire{missing.length > 1 ? 's' : ''} non renseigné{missing.length > 1 ? 's' : ''} :
+                  </p>
+                </div>
+              </div>
+              <ul className="space-y-1 max-h-40 overflow-y-auto">
+                {missing.map((m, i) => (
+                  <li key={i} className="text-xs text-slate-700 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                    <span className="font-medium">{m.pieceName}</span> — {m.elementLabel}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-500 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                Un EDL non-conforme peut être contesté en justice.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAlurModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-bold hover:bg-slate-50 transition"
+                >
+                  ← Corriger
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAlurModal(false); setStep(4); }}
+                  className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600 transition"
+                >
+                  Continuer quand même
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 }
