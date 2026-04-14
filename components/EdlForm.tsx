@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
@@ -91,7 +92,7 @@ function AddEquipmentRow({ onAdd }: { onAdd: (kind: ElementKind, label: string) 
           onAdd(kind, label);
           setCustomLabel('');
         }}
-        className="shrink-0 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-200 transition"
+        className="w-full min-[480px]:w-auto shrink-0 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-200 transition"
       >
         + Ajouter
       </button>
@@ -110,34 +111,35 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
 }) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const [showMenu, setShowMenu] = useState(false);
-  const [menuAbove, setMenuAbove] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
+  // Ferme le popover si l'utilisateur scrolle (pattern Radix/Headless)
   useEffect(() => {
     if (!showMenu) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const close = () => setShowMenu(false);
+    window.addEventListener('scroll', close, { passive: true, capture: true });
+    return () => window.removeEventListener('scroll', close, { capture: true });
   }, [showMenu]);
+
+  const openMenu = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const above = window.innerHeight - rect.bottom < rect.top;
+      setMenuStyle(above
+        ? { bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+      );
+    }
+    setShowMenu(true);
+  };
 
   const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) await onPhotoSelected(file);
     e.target.value = '';
     setShowMenu(false);
-  };
-
-  const openMenu = () => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      setMenuAbove(rect.top > window.innerHeight * 0.35);
-    }
-    setShowMenu(prev => !prev);
   };
 
   const hiddenInputs = (
@@ -147,91 +149,53 @@ function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false
     </>
   );
 
-  // ── MODE COMPACT (Step 3) — trigger unique + popup direction auto ──
-  if (compact) {
-    if (isUploading) return (
-      <div className="flex items-center justify-center w-8 h-8 bg-slate-100 rounded-lg shrink-0">
-        <div className="w-3 h-3 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin" />
-      </div>
-    );
-
-    const compactMenu = (
-      <div className={`absolute right-0 ${menuAbove ? 'bottom-full mb-1' : 'top-full mt-1'} bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-50 w-40`}>
-        <button type="button" onClick={() => { cameraRef.current?.click(); setShowMenu(false); }}
-          className="flex items-center gap-3 w-full px-3 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
-          <Camera size={14} className="text-slate-500" /> Caméra
+  const popup = showMenu ? createPortal(
+    <>
+      <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+      <div className="fixed w-44 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50" style={menuStyle}>
+        <button type="button" onClick={() => cameraRef.current?.click()}
+          className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+          <Camera size={14} className="text-slate-500" /> Prendre une photo
         </button>
         <div className="h-px bg-slate-100" />
-        <button type="button" onClick={() => { galleryRef.current?.click(); setShowMenu(false); }}
-          className="flex items-center gap-3 w-full px-3 py-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
-          <ImageIcon size={14} className="text-slate-500" /> Galerie
+        <button type="button" onClick={() => galleryRef.current?.click()}
+          className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+          <ImageIcon size={14} className="text-slate-500" /> Choisir galerie
         </button>
-        {onPhotoDeleted && (
+        {hasPhoto && onPhotoDeleted && (
           <>
-            <div className="h-px bg-slate-100" />
+            <div className="h-px bg-slate-100 my-1" />
             <button type="button" onClick={() => { onPhotoDeleted(); setShowMenu(false); }}
-              className="flex items-center gap-3 w-full px-3 py-2.5 text-xs font-medium text-red-500 hover:bg-red-50 transition">
-              <X size={14} /> Supprimer
+              className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition">
+              <Trash2 size={14} /> Supprimer la photo
             </button>
           </>
         )}
       </div>
-    );
-
-    return (
-      <div ref={containerRef} className="relative shrink-0">
-        {hiddenInputs}
-        <button type="button" onClick={openMenu}
-          className={`w-8 h-8 flex items-center justify-center rounded-lg transition ${
-            hasPhoto ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-900 text-white hover:bg-slate-700'
-          }`}>
-          <Camera size={15} />
-        </button>
-        {showMenu && compactMenu}
-      </div>
-    );
-  }
-
-  // ── MODE NORMAL (Step 2) — popup vers le haut ──
-  const popupMenu = (
-    <div className="absolute right-0 bottom-full mb-1 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-50 w-44">
-      <button type="button" onClick={() => cameraRef.current?.click()}
-        className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-        <Camera size={16} className="text-slate-500" /> Caméra
-      </button>
-      <div className="h-px bg-slate-100" />
-      <button type="button" onClick={() => galleryRef.current?.click()}
-        className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
-        <ImageIcon size={16} className="text-slate-500" /> Galerie
-      </button>
-    </div>
-  );
+    </>,
+    document.body
+  ) : null;
 
   if (isUploading) return (
-    <div className="flex items-center justify-center w-12 h-12 bg-slate-100 rounded-xl shrink-0">
-      <div className="w-4 h-4 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin" />
+    <div className={`flex items-center justify-center ${compact ? 'w-8 h-8 rounded-lg' : 'w-12 h-12 rounded-xl'} bg-slate-100 shrink-0`}>
+      <div className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin`} />
     </div>
   );
 
-  if (hasPhoto) return (
-    <div ref={containerRef} className="relative shrink-0">
-      {hiddenInputs}
-      <button type="button" onClick={() => setShowMenu(prev => !prev)}
-        className="flex items-center gap-2 px-3 h-12 bg-green-600 text-white rounded-xl text-xs font-bold hover:bg-green-700 transition">
-        <CheckCircle2 size={15} /> Modifier ?
-      </button>
-      {showMenu && popupMenu}
-    </div>
-  );
+  const triggerClass = compact
+    ? `w-8 h-8 flex items-center justify-center rounded-lg transition shrink-0 ${hasPhoto ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-900 text-white hover:bg-slate-700'}`
+    : `flex items-center gap-2 px-3 h-12 rounded-xl text-xs font-bold transition ${hasPhoto ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-slate-900 text-white hover:bg-slate-700'}`;
 
   return (
-    <div ref={containerRef} className="relative shrink-0">
+    <div className="relative shrink-0">
       {hiddenInputs}
-      <button type="button" onClick={() => setShowMenu(prev => !prev)}
-        className="flex items-center gap-2 px-3 h-12 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition">
-        <Camera size={15} /> Photo
+      {popup}
+      <button ref={btnRef} type="button" onClick={openMenu} className={triggerClass}>
+        {hasPhoto
+          ? (compact ? <CheckCircle2 size={15} /> : <><CheckCircle2 size={15} /> Modifier ?</>)
+          : (compact ? <Camera size={15} /> : <><Camera size={15} /> Photo</>)
+        }
       </button>
-      {showMenu && popupMenu}
     </div>
   );
 }
@@ -246,6 +210,15 @@ function extractStoragePath(url: string): string | null {
     return decodeURIComponent(u.pathname.slice(idx + marker.length));
   } catch {
     return null;
+  }
+}
+
+// Supprime une photo du bucket — fire & forget, ne bloque pas l'UX
+function deletePhotoFromBucket(url: string): void {
+  const path = extractStoragePath(url);
+  if (path) {
+    supabase.storage.from('photos-etats-des-lieux').remove([path])
+      .then(({ error }) => { if (error) console.warn('Photo cleanup failed:', error.message); });
   }
 }
 
@@ -781,6 +754,12 @@ export default function EdlForm() {
                     }
                     setUploadingKey(null);
                   }}
+                  onPhotoDeleted={() => {
+                    if (formData.compteurs[0].photo_url) deletePhotoFromBucket(formData.compteurs[0].photo_url);
+                    const newCompteurs = [...formData.compteurs];
+                    newCompteurs[0] = { ...newCompteurs[0], photo_url: '', photo_hash: '' };
+                    setFormData({...formData, compteurs: newCompteurs});
+                  }}
                 />
               </div>
 
@@ -823,6 +802,12 @@ export default function EdlForm() {
                       setFormData({...formData, compteurs: newCompteurs});
                     }
                     setUploadingKey(null);
+                  }}
+                  onPhotoDeleted={() => {
+                    if (formData.compteurs[1].photo_url) deletePhotoFromBucket(formData.compteurs[1].photo_url);
+                    const newCompteurs = [...formData.compteurs];
+                    newCompteurs[1] = { ...newCompteurs[1], photo_url: '', photo_hash: '' };
+                    setFormData({...formData, compteurs: newCompteurs});
                   }}
                 />
               </div>
@@ -881,9 +866,10 @@ export default function EdlForm() {
                             setUploadingKey(null);
                           }}
                           onPhotoDeleted={() => {
+                            if (piece.photo_url) deletePhotoFromBucket(piece.photo_url);
                             const newPieces = [...formData.pieces];
                             newPieces[pIndex] = { ...newPieces[pIndex], photo_url: undefined, photo_hash: undefined };
-                            setFormData({...formData, pieces: newPieces});
+                            setFormData({ ...formData, pieces: newPieces });
                           }}
                         />
                         {/* Bouton supprimer — icône seule */}
@@ -904,8 +890,8 @@ export default function EdlForm() {
                       {piece.elements.map((el: any, eIndex: number) => (
                         <div key={el.id ?? eIndex} className="py-3 border-b border-slate-50 last:border-0">
 
-                          {/* Label + badge obligatoire/suppression */}
-                          <div className="flex items-center gap-1.5 mb-2">
+                          {/* Label éditable + icône obligatoire/suppression + photo conditionnelle */}
+                          <div className="flex items-center gap-1 mb-2">
                             <input
                               type="text"
                               value={el.label ?? el.nom ?? ''}
@@ -918,24 +904,56 @@ export default function EdlForm() {
                                 setFormData({ ...formData, pieces: newPieces });
                               }}
                               placeholder="Nom de l'élément"
-                              className="font-bold text-slate-700 text-sm flex-1 min-w-0 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none pb-px rounded-none"
+                              title={el.label ?? el.nom ?? ''}
+                              className="font-bold text-slate-700 text-sm flex-1 min-w-0 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none pb-px rounded-none overflow-hidden text-ellipsis"
                             />
+                            {['moyen', 'mauvais', 'hs'].includes(el.etat) && (
+                              <PhotoSelector
+                                compact
+                                hasPhoto={!!el.photo_url}
+                                isUploading={uploadingKey === `e${pIndex}-${eIndex}`}
+                                onPhotoSelected={async (file) => {
+                                  setUploadingKey(`e${pIndex}-${eIndex}`);
+                                  const result = await uploadToSupabase(file, "degats");
+                                  if (result) {
+                                    const newPieces = [...formData.pieces];
+                                    newPieces[pIndex].elements[eIndex] = {
+                                      ...newPieces[pIndex].elements[eIndex],
+                                      photo_url: result.url,
+                                      photo_hash: result.hash,
+                                    };
+                                    setFormData({ ...formData, pieces: newPieces });
+                                  }
+                                  setUploadingKey(null);
+                                }}
+                                onPhotoDeleted={() => {
+                                  const newPieces = [...formData.pieces];
+                                  newPieces[pIndex].elements[eIndex] = {
+                                    ...newPieces[pIndex].elements[eIndex],
+                                    photo_url: undefined,
+                                    photo_hash: undefined,
+                                  };
+                                  setFormData({ ...formData, pieces: newPieces });
+                                }}
+                              />
+                            )}
                             {el.obligatoire ? (
-                              <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-100 text-slate-400" title="Obligatoire Loi Alur">
-                                <Lock size={11} />
+                              <span className="shrink-0 w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center">
+                                <Lock size={8} className="text-slate-500" />
                               </span>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => deleteElement(pIndex, eIndex)}
-                                className="w-6 h-6 flex items-center justify-center rounded text-red-300 hover:bg-red-50 hover:text-red-500 transition shrink-0"
+                                className="w-6 h-6 flex items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-500 transition shrink-0"
                               >
                                 <Trash2 size={12} />
                               </button>
                             )}
+
                           </div>
 
-                          {/* État + observations + photo (si dégradé) */}
+                          {/* État + observations — empilés sur très petit écran */}
                           <div className="flex flex-col min-[550px]:flex-row gap-1.5">
                             <select
                               className={`w-full min-[350px]:w-[45%] shrink-0 p-2 rounded-lg border text-xs ${
@@ -985,36 +1003,6 @@ export default function EdlForm() {
                                 setFormData({ ...formData, pieces: newPieces });
                               }}
                             />
-                            {['moyen', 'mauvais', 'hs'].includes(el.etat) && (
-                              <PhotoSelector
-                                compact
-                                hasPhoto={!!el.photo_url}
-                                isUploading={uploadingKey === `e${pIndex}-${eIndex}`}
-                                onPhotoSelected={async (file) => {
-                                  setUploadingKey(`e${pIndex}-${eIndex}`);
-                                  const result = await uploadToSupabase(file, "degats");
-                                  if (result) {
-                                    const newPieces = [...formData.pieces];
-                                    newPieces[pIndex].elements[eIndex] = {
-                                      ...newPieces[pIndex].elements[eIndex],
-                                      photo_url: result.url,
-                                      photo_hash: result.hash,
-                                    };
-                                    setFormData({ ...formData, pieces: newPieces });
-                                  }
-                                  setUploadingKey(null);
-                                }}
-                                onPhotoDeleted={() => {
-                                  const newPieces = [...formData.pieces];
-                                  newPieces[pIndex].elements[eIndex] = {
-                                    ...newPieces[pIndex].elements[eIndex],
-                                    photo_url: undefined,
-                                    photo_hash: undefined,
-                                  };
-                                  setFormData({ ...formData, pieces: newPieces });
-                                }}
-                              />
-                            )}
                           </div>
 
                         </div>
@@ -1039,7 +1027,7 @@ export default function EdlForm() {
 
               {/* Section ajout pièce */}
               <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                <div className="flex gap-2">
+                <div className="flex flex-col min-[480px]:flex-row gap-2 flex-wrap">
                   <select id="select-room" className="flex-1 min-w-0 p-3 rounded-lg border border-slate-300 bg-white text-sm">
                     {["Cuisine", "Salon", "Chambre 1", "Chambre 2", "SDB", "Entrée", "Balcon"]
                       .filter(name => !formData.pieces.some((p: any) => p.nom === name))
@@ -1258,7 +1246,7 @@ export default function EdlForm() {
 
                 {/* Modale "Je n'ai pas reçu le mail" */}
                 {resendModalOpen && (
-                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
                     <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 animate-in zoom-in-95">
                       {resendSent ? (
                         <>
@@ -1338,7 +1326,7 @@ export default function EdlForm() {
 
       {/* ── Modale : photo revert (état redevient non-dégradé alors qu'une photo existe) ── */}
       {photoRevertModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
             <h3 className="font-bold text-slate-900 text-sm">L&apos;élément n&apos;est plus dégradé</h3>
             <p className="text-xs text-slate-500">
@@ -1367,13 +1355,7 @@ export default function EdlForm() {
                 onClick={() => {
                   const el = formData.pieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex];
                   // Purge bucket — fire & forget, ne bloque pas l'UX
-                  if (el.photo_url) {
-                    const path = extractStoragePath(el.photo_url);
-                    if (path) {
-                      supabase.storage.from('photos-etats-des-lieux').remove([path])
-                        .then(({ error }) => { if (error) console.warn('Photo cleanup failed:', error.message); });
-                    }
-                  }
+                  if (el.photo_url) deletePhotoFromBucket(el.photo_url);
                   const newPieces = [...formData.pieces];
                   newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex] = {
                     ...newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex],
@@ -1398,7 +1380,7 @@ export default function EdlForm() {
       {showAlurModal && (() => {
         const missing = getMissingAlurElements();
         return (
-          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center shrink-0 text-lg">⚠️</div>
