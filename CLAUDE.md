@@ -427,6 +427,12 @@ eIDAS via Yousign, PWA offline complète.
 - [ ] **Pas d'action sur les signatures base64 dans le JSONB** : analyse faite, le coût (~15 Ko par rapport) est négligeable à l'échelle visée (largement sous la limite gratuite Supabase 500 Mo, soit ~25 000 rapports). Aucun bénéfice utilisateur, risque de régression. À reconsidérer uniquement si dépassement de 10 000 rapports actifs.
 - [ ] **Compléter le socle Alur dans les pièces** : électricité (prises/interrupteurs) sur toutes les pièces habitables, plomberie/sanitaires en pièces humides, chauffage. Sera traité à l'étape 5 de la roadmap (structure `elements[]` + templates).
 - [ ] **Brancher `archive_json`** : la colonne existe (créée à l'étape 1) mais reste vide. À remplir au moment de la transition vers `email_delivered` avec une version structurée et allégée du rapport (pas de signatures base64, pas d'URLs de photos), pour servir de base à la fonction future "EDL de sortie comparatif". Estimation : ~5 lignes de code, à faire au moment de l'étape "EDL de sortie" post-MVP.
+- [ ] **SEO** : configurer `metadata` Next.js (title, description, OG), `sitemap.xml`, `robots.txt`. Prévoir 3–5 articles de blog ciblés "état des lieux Jeanbrun", "EDL dématérialisé 2026". Créer Google My Business.
+- [ ] **Dépôt INPI** : déposer la marque "Express EDL" (~190 €) avant toute communication publique.
+- [ ] **Licence du code** : décider du modèle (privative, MIT, AGPL…) avant tout commit public.
+- [ ] **Mentions légales + CGU/CGV** : à rédiger — clause conservation 48h photos déjà actée, clause valeur probante PDF à ajouter.
+- [ ] **Conformité RGPD** : établir le registre des traitements, rédiger la politique de confidentialité, désigner un DPO (auto-désignation possible à cette échelle).
+- [ ] **Tests utilisateurs** : conduire 5 entretiens bailleurs Leboncoin avant toute dépense publicitaire payante.
 
 ## 🤝 Conventions de travail avec Claude Code
 

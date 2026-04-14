@@ -1,12 +1,105 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2 } from "lucide-react";
+import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
 import { generateEDL_PDF, injectHashIntoPDF } from '@/lib/pdfGenerator';
-import type { RapportStatus } from '@/lib/types';
+import type { RapportStatus, PieceElement, ElementKind, ElementTemplate } from '@/lib/types';
+import { pieceTemplates, getPieceKind } from '@/lib/pieceTemplates';
+
+// ── Constantes éléments ──────────────────────────────────────────────────────
+
+const ETAT_LABELS: Record<string, string> = {
+  neuf: 'Neuf',
+  tres_bon: 'Très bon état',
+  bon: 'Bon état',
+  moyen: 'Usure normale',
+  mauvais: 'Mauvais état',
+  hs: 'Hors service',
+};
+
+const OPTIONAL_ELEMENTS: Array<{ kind: ElementKind; label: string }> = [
+  { kind: 'volet',           label: 'Volet / Store' },
+  { kind: 'placard',         label: 'Placard / Rangement' },
+  { kind: 'clim',            label: 'Climatisation' },
+  { kind: 'cheminee',        label: 'Cheminée / Poêle' },
+  { kind: 'equipement_meuble', label: 'Équipement (meublé)' },
+  { kind: 'custom',          label: 'Autre (texte libre)' },
+];
+
+function makeElement(t: ElementTemplate): PieceElement {
+  return {
+    id: crypto.randomUUID(),
+    kind: t.kind,
+    label: t.label,
+    obligatoire: t.obligatoire,
+    etat: 'bon',
+    observations: '',
+    meta: {},
+  };
+}
+
+// À câbler lors de l'implémentation "reprendre un brouillon draft" (roadmap étape 6 — Auth).
+// Convertit un élément ancien { nom, etat (label FR), observations } en PieceElement typé.
+// Note : les anciens etat ("Bon état", "Très bon état") resteront en string brut dans
+// etat — une table de mapping inverse sera nécessaire au moment du câblage.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function normalizeElement(el: any): PieceElement {
+  return {
+    id: el.id ?? crypto.randomUUID(),
+    kind: el.kind ?? ('custom' as ElementKind),
+    label: el.label ?? el.nom ?? '',
+    obligatoire: el.obligatoire ?? false,
+    etat: el.etat ?? null,
+    observations: el.observations ?? '',
+    photo_url: el.photo_url,
+    photo_hash: el.photo_hash,
+    meta: el.meta ?? {},
+  };
+}
+
+// Composant sélecteur d'équipement optionnel — une instance par pièce
+function AddEquipmentRow({ onAdd }: { onAdd: (kind: ElementKind, label: string) => void }) {
+  const [kind, setKind] = useState<ElementKind>('volet');
+  const [customLabel, setCustomLabel] = useState('');
+
+  return (
+    <div className="flex gap-2 items-center flex-wrap">
+      <select
+        value={kind}
+        onChange={e => { setKind(e.target.value as ElementKind); setCustomLabel(''); }}
+        className="flex-1 min-w-0 p-2 rounded-lg border border-slate-200 text-xs bg-white"
+      >
+        {OPTIONAL_ELEMENTS.map(e => <option key={e.kind} value={e.kind}>{e.label}</option>)}
+      </select>
+      {kind === 'custom' && (
+        <input
+          value={customLabel}
+          onChange={e => setCustomLabel(e.target.value)}
+          placeholder="Nom de l'équipement"
+          className="flex-1 min-w-0 p-2 rounded-lg border border-slate-200 text-xs"
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          const label = kind === 'custom'
+            ? (customLabel.trim() || 'Équipement')
+            : OPTIONAL_ELEMENTS.find(e => e.kind === kind)!.label;
+          onAdd(kind, label);
+          setCustomLabel('');
+        }}
+        className="shrink-0 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-200 transition"
+      >
+        + Ajouter
+      </button>
+    </div>
+  );
+}
+
+// ── Composant PhotoSelector ───────────────────────────────────────────────────
 
 function PhotoSelector({ onPhotoSelected, isUploading, hasPhoto, compact = false }: {
   onPhotoSelected: (file: File) => Promise<void>;
@@ -351,15 +444,15 @@ export default function EdlForm() {
       // Crée une petite variable de validation pour Step 2
     const isStep2Valid = () => {
       const m = formData.metadata;
-      const basicInfo = 
-      m.adresse_bien.length > 5 && 
+      const basicInfo =
+      m.adresse_bien.length > 5 &&
       m.bailleur.nom.length > 2 &&
-      m.bailleur.email.includes('@') && 
+      m.bailleur.email.includes('@') &&
       m.locataire.nom.length > 2 &&
       m.locataire.email.includes('@') &&
-      m.cles && 
+      m.cles &&
       m.chauffage;
-      
+
       // Si c'est Jeanbrun, le cadastre est obligatoire. Sinon, non.
       if (m.isJeanbrun) {
         return basicInfo && m.cadastre.length > 0;
@@ -367,6 +460,44 @@ export default function EdlForm() {
 
       return basicInfo;
     };
+
+    // ── Handlers Step 3 ──────────────────────────────────────────────────────
+
+    const addOptionalElement = (pIndex: number, kind: ElementKind, label: string) => {
+      const newEl: PieceElement = {
+        id: crypto.randomUUID(),
+        kind,
+        label,
+        obligatoire: false,
+        etat: null,
+        observations: '',
+        meta: {},
+      };
+      const newPieces = [...formData.pieces];
+      newPieces[pIndex] = {
+        ...newPieces[pIndex],
+        elements: [...newPieces[pIndex].elements, newEl],
+      };
+      setFormData({ ...formData, pieces: newPieces });
+    };
+
+    const deleteElement = (pIndex: number, eIndex: number) => {
+      const newPieces = [...formData.pieces];
+      newPieces[pIndex] = {
+        ...newPieces[pIndex],
+        elements: newPieces[pIndex].elements.filter((_: any, i: number) => i !== eIndex),
+      };
+      setFormData({ ...formData, pieces: newPieces });
+    };
+
+    // Badge affiché quand tous les éléments obligatoires ont un état renseigné
+    const isAlurCompliant = () =>
+      formData.pieces.length > 0 &&
+      formData.pieces.every((piece: any) =>
+        (piece.elements ?? [])
+          .filter((el: any) => el.obligatoire)
+          .every((el: any) => el.etat !== null && el.etat !== undefined)
+      );
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
@@ -718,12 +849,38 @@ export default function EdlForm() {
                     {/* Éléments */}
                     <div className="p-3 md:p-4 space-y-3">
                       {piece.elements.map((el: any, eIndex: number) => (
-                        <div key={eIndex} className="py-3 border-b border-slate-50 last:border-0">
-                          
-                          {/* Nom élément + bouton photo compact */}
-                          <div className="flex justify-between items-center mb-2">
-                            <p className="font-bold text-slate-700 text-sm">{el.nom}</p>
-                            {el.etat !== "Très bon état" && (
+                        <div key={el.id ?? eIndex} className="py-3 border-b border-slate-50 last:border-0">
+
+                          {/* Label éditable + icône obligatoire/suppression + photo conditionnelle */}
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <input
+                              type="text"
+                              value={el.label ?? el.nom ?? ''}
+                              onChange={(e) => {
+                                const newPieces = [...formData.pieces];
+                                newPieces[pIndex].elements[eIndex] = {
+                                  ...newPieces[pIndex].elements[eIndex],
+                                  label: e.target.value,
+                                };
+                                setFormData({ ...formData, pieces: newPieces });
+                              }}
+                              placeholder="Nom de l'élément"
+                              className="font-bold text-slate-700 text-sm flex-1 min-w-0 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-blue-400 focus:outline-none pb-px rounded-none"
+                            />
+                            {el.obligatoire ? (
+                              <span title="Obligatoire Loi Alur" className="shrink-0">
+                                <Lock size={11} className="text-slate-300" />
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => deleteElement(pIndex, eIndex)}
+                                className="w-6 h-6 flex items-center justify-center rounded text-red-300 hover:bg-red-50 hover:text-red-500 transition shrink-0"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                            {['moyen', 'mauvais', 'hs'].includes(el.etat) && (
                               <PhotoSelector
                                 compact
                                 hasPhoto={!!el.photo_url}
@@ -738,7 +895,7 @@ export default function EdlForm() {
                                       photo_url: result.url,
                                       photo_hash: result.hash,
                                     };
-                                    setFormData({...formData, pieces: newPieces});
+                                    setFormData({ ...formData, pieces: newPieces });
                                   }
                                   setUploadingKey(null);
                                 }}
@@ -746,43 +903,63 @@ export default function EdlForm() {
                             )}
                           </div>
 
-                          {/* Select + input sur toute la largeur, empilés sur très petit écran */}
-                          <div className="mt-2">
-                            <div className="flex flex-col min-[550px]:flex-row gap-1.5">
-                              <select
-                                className="w-full min-[350px]:w-[45%] shrink-0 p-2 rounded-lg border border-slate-200 bg-white text-xs"
-                                value={el.etat}
-                                onChange={(e) => {
-                                  const newPieces = [...formData.pieces];
-                                  newPieces[pIndex].elements[eIndex].etat = e.target.value;
-                                  setFormData({...formData, pieces: newPieces});
-                                }}
-                              >
-                                <option>Très bon état</option>
-                                <option>Bon état</option>
-                                <option>État d'usage</option>
-                                <option>Mauvais état</option>
-                              </select>
-                              <input
-                                type="text" placeholder="Note (ex: tache, rayure...)"
-                                className="flex-1 min-w-0 p-2 rounded-lg border border-slate-200 bg-slate-50 text-xs"
-                                value={el.observations}
-                                onChange={(e) => {
-                                  const newPieces = [...formData.pieces];
-                                  newPieces[pIndex].elements[eIndex].observations = e.target.value;
-                                  setFormData({...formData, pieces: newPieces});
-                                }}
-                              />
-                            </div>
+                          {/* État + observations — empilés sur très petit écran */}
+                          <div className="flex flex-col min-[550px]:flex-row gap-1.5">
+                            <select
+                              className="w-full min-[350px]:w-[45%] shrink-0 p-2 rounded-lg border border-slate-200 bg-white text-xs"
+                              value={el.etat ?? ''}
+                              onChange={(e) => {
+                                const newPieces = [...formData.pieces];
+                                newPieces[pIndex].elements[eIndex] = {
+                                  ...newPieces[pIndex].elements[eIndex],
+                                  etat: e.target.value || null,
+                                };
+                                setFormData({ ...formData, pieces: newPieces });
+                              }}
+                            >
+                              <option value="">— État —</option>
+                              <option value="neuf">{ETAT_LABELS.neuf}</option>
+                              <option value="tres_bon">{ETAT_LABELS.tres_bon}</option>
+                              <option value="bon">{ETAT_LABELS.bon}</option>
+                              <option value="moyen">{ETAT_LABELS.moyen}</option>
+                              <option value="mauvais">{ETAT_LABELS.mauvais}</option>
+                              <option value="hs">{ETAT_LABELS.hs}</option>
+                            </select>
+                            <input
+                              type="text" placeholder="Note (ex: tache, rayure...)"
+                              className="flex-1 min-w-0 p-2 rounded-lg border border-slate-200 bg-slate-50 text-xs"
+                              value={el.observations}
+                              onChange={(e) => {
+                                const newPieces = [...formData.pieces];
+                                newPieces[pIndex].elements[eIndex] = {
+                                  ...newPieces[pIndex].elements[eIndex],
+                                  observations: e.target.value,
+                                };
+                                setFormData({ ...formData, pieces: newPieces });
+                              }}
+                            />
                           </div>
 
                         </div>
                       ))}
                     </div>
 
+                    {/* + Ajouter un équipement optionnel */}
+                    <div className="px-3 pb-3 pt-1 border-t border-slate-100">
+                      <AddEquipmentRow onAdd={(kind, label) => addOptionalElement(pIndex, kind, label)} />
+                    </div>
+
                   </div>
                 ))}
               </div>
+
+              {/* Badge Alur */}
+              {isAlurCompliant() && (
+                <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-xs font-bold">
+                  <CheckCircle2 size={14} />
+                  ✓ Conforme Loi Alur — tous les éléments obligatoires sont renseignés
+                </div>
+              )}
 
               {/* Section ajout pièce */}
               <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
@@ -797,15 +974,18 @@ export default function EdlForm() {
                     onClick={() => {
                       const select = document.getElementById('select-room') as HTMLSelectElement;
                       if (!select.value) return;
+                      const nom = select.value;
+                      const kind = getPieceKind(nom);
+                      const templates = pieceTemplates[kind] ?? pieceTemplates.autre;
                       const newRoom = {
-                        nom: select.value,
-                        elements: [
-                          { nom: "Murs & Plafond", etat: "Bon état", observations: "", photos: [] },
-                          { nom: "Sols / Plinthes", etat: "Bon état", observations: "", photos: [] },
-                          { nom: "Menuiseries / Vitres", etat: "Bon état", observations: "", photos: [] }
-                        ]
+                        id: crypto.randomUUID(),
+                        kind,
+                        nom,
+                        photo_url: undefined,
+                        photo_hash: undefined,
+                        elements: templates.map(makeElement),
                       };
-                      setFormData({...formData, pieces: [...formData.pieces, newRoom] as any});
+                      setFormData({ ...formData, pieces: [...formData.pieces, newRoom] });
                     }}
                     className="shrink-0 bg-slate-900 text-white px-5 py-3 rounded-lg font-bold text-sm hover:bg-slate-800 transition"
                   >

@@ -1,5 +1,15 @@
 import { PDFDocument, PDFPage, PDFFont, StandardFonts, rgb, RGB } from 'pdf-lib';
 
+// Mapping des clés courtes vers les labels français pour l'affichage PDF
+const ETAT_LABELS: Record<string, string> = {
+  neuf: 'Neuf',
+  tres_bon: 'Très bon état',
+  bon: 'Bon état',
+  moyen: 'Usure normale',
+  mauvais: 'Mauvais état',
+  hs: 'Hors service',
+};
+
 // --- Layout constants (A4 in points) ---
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -138,7 +148,7 @@ function buildPhotoList(data: any): PhotoEntry[] {
       list.push({ index: ++i, label: `Compteur ${c.type}`, url: c.photo_url, hash: c.photo_hash ?? null });
     }
   }
-  for (const piece of (data.pieces ?? []) as Array<{ nom: string; photo_url?: string; photo_hash?: string; elements?: Array<{ nom: string; photo_url?: string; photo_hash?: string }> }>) {
+  for (const piece of (data.pieces ?? []) as Array<{ nom: string; photo_url?: string; photo_hash?: string; elements?: Array<{ nom?: string; label?: string; photo_url?: string; photo_hash?: string }> }>) {
     if (piece.photo_url && !seen.has(piece.photo_url)) {
       seen.add(piece.photo_url);
       list.push({ index: ++i, label: `${piece.nom} (vue générale)`, url: piece.photo_url, hash: piece.photo_hash ?? null });
@@ -146,7 +156,7 @@ function buildPhotoList(data: any): PhotoEntry[] {
     for (const el of (piece.elements ?? [])) {
       if (el.photo_url && !seen.has(el.photo_url)) {
         seen.add(el.photo_url);
-        list.push({ index: ++i, label: `${piece.nom} — ${el.nom}`, url: el.photo_url, hash: el.photo_hash ?? null });
+        list.push({ index: ++i, label: `${piece.nom} — ${el.label ?? el.nom}`, url: el.photo_url, hash: el.photo_hash ?? null });
       }
     }
   }
@@ -265,8 +275,9 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
 
   // ── PIÈCES ─────────────────────────────────────────────────────────────────
   for (const piece of data.pieces) {
-    // Page break if needed
-    if (cursorY > PAGE_H - 120) {
+    // Page break if needed — estimate height to avoid mid-table overflow
+    const estimatedPieceH = 18 + (piece.elements?.length ?? 3) * 18 + 30;
+    if (cursorY + estimatedPieceH > PAGE_H - 60) {
       page = await addPage(doc);
       cursorY = 50;
     }
@@ -285,8 +296,8 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
     cursorY += 18;
 
     const elementRows = piece.elements.map((el: any) => [
-      el.nom,
-      el.etat,
+      el.label ?? el.nom,
+      ETAT_LABELS[el.etat] ?? el.etat ?? '—',
       el.photo_url
         ? `${el.observations || 'R.A.S'} (Détail photographié)`
         : el.observations || 'R.A.S',
