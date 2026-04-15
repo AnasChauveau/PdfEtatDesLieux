@@ -21,7 +21,33 @@
 ## Commandes Utiles
 - `npm run dev` : Lancer le serveur local
 - `npm run build` : Vérification de la compilation
-- `npx supabase functions deploy send-edl-mail` : Déploiement des Edge Functions
+
+## Edge Functions Supabase
+
+| Fonction | Déclencheur | Rôle |
+|---|---|---|
+| `zip-and-send` | Frontend (après `pdf_generated`) | Zippe les photos, upload sur `edl-zips`, envoie les emails via Resend, transition → `email_sent` |
+| `webhook-resend` | Webhook Resend (Svix) | Reçoit les events de livraison (`delivered`, `bounced`, `complained`), log dans `email_events`, met à jour le statut rapport |
+| `cron-purge` | Cron Supabase — 03:00 UTC quotidien | Applique les 5 règles TTL (draft/24h, payment_pending/1h, email_delivered/48h, zip_created+email_failed/72h, email_sent/7j) |
+
+**Déploiement individuel :**
+```bash
+npx supabase functions deploy zip-and-send
+npx supabase functions deploy webhook-resend
+npx supabase functions deploy cron-purge
+```
+
+**Déploiement de toutes les fonctions en une commande :**
+```bash
+npx supabase functions deploy
+```
+
+**Secrets requis** (à définir via `npx supabase secrets set KEY=value`) :
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — injectés automatiquement par Supabase
+- `RESEND_API_KEY` — clé API Resend
+- `RESEND_FROM_EMAIL` — adresse expéditrice vérifiée dans Resend
+- `RESEND_WEBHOOK_SECRET` — secret Svix copié depuis le dashboard Resend
+- `CRON_SECRET` — secret custom pour protéger `cron-purge` (`openssl rand -hex 32`)
 
 ## Stratégie "Zéro Déchet"
 - Les photos ne sont PAS incluses dans le PDF pour optimiser le poids (cible < 300 ko).
@@ -265,18 +291,30 @@ export const pieceTemplates: Record<PieceKind, ElementTemplate[]> = {
 **Priorité d'ajout des pièces** : WC en premier (le plus oublié, source #1 de
 litiges), puis parking, puis cave, puis balcon.
 
-### 8. Purge automatique — cron quotidien Supabase (3 TTL)
+### 8. Purge automatique — cron quotidien Supabase (5 TTL) ✅ FAIT
 
-Un seul cron quotidien (pg_cron ou Edge Function planifiée) gère les 3 règles :
+Edge Function `supabase/functions/cron-purge/index.ts` — déclenchée quotidiennement à 03:00 UTC.
+Protégée par `CRON_SECRET` en header `x-cron-secret`.
 
-| Condition | Action |
-|---|---|
-| `status = 'draft'` depuis > 24 h | Purge totale : suppression ligne DB + photos sources dans `photos-etats-des-lieux` |
-| `status = 'payment_pending'` depuis > 1 h | Purge totale : paiement abandonné ou échoué |
-| `status = 'email_delivered'` depuis > 48 h | Suppression du ZIP dans `edl-zips` uniquement → `status = 'purged'` |
+**Détection du "depuis > Xh"** : la table `rapports` n'a pas de `status_changed_at`.
+On utilise `rapports.created_at` pour les statuts initiaux (draft, payment_pending),
+et `email_events.created_at` (dernière entrée par type) pour les règles basées sur transition.
 
-PDF (`rapports-finaux`) et `archive_json` ne sont jamais touchés par ce cron.
+| Règle | Condition | Source date | Action |
+|---|---|---|---|
+| R1 | `draft` + created_at > 24 h | `rapports.created_at` | Purge totale : DELETE rapport + photos sources |
+| R2 | `payment_pending` + created_at > 1 h | `rapports.created_at` | Purge totale (paiement abandonné) |
+| R3 | `email_delivered` + dernier event `delivered` > 48 h | `email_events.created_at` | Suppression ZIP → `purged` |
+| R4 | `zip_created` ou `email_failed` + created_at > 72 h | `rapports.created_at` | Suppression ZIP → `purged` (webhook stuck) |
+| R5 | `email_sent` + dernier event `sent` > 7 jours | `email_events.created_at` | Suppression ZIP → `purged` (filet webhook absent) |
+
+PDF (`rapports-finaux`) et `archive_json` ne sont **jamais** touchés par ce cron.
 Ils restent jusqu'à `archive_expires_at` (created_at + 9 ans), purgés par un cron séparé.
+
+**Config Cron Supabase** (manuel) : Dashboard → Database → Cron Jobs → New :
+- Schedule : `0 3 * * *` (03:00 UTC)
+- URL : `https://<PROJECT_REF>.supabase.co/functions/v1/cron-purge`
+- Headers : `Authorization: Bearer <anon_key>`, `x-cron-secret: <CRON_SECRET>`, `Content-Type: application/json`
 
 ### 9. Valeur probante cryptographique du PDF et des photos
 
@@ -395,8 +433,10 @@ Ordre d'implémentation recommandé :
     "Je n'ai pas reçu le mail" et mention de la date de purge automatique
 4. **Refonte PDF** : mentions légales + hash + annexe photos numérotées (1 j)
 5. **Structure `elements[]` + templates de pièces** (1-2 j) — AVANT d'ajouter WC/parking
-5.ter. **Cron de purge automatique — 3 TTL** (2 h) — règles draft/24h, payment_pending/1h,
-    email_delivered/48h ; remplace l'écran de confirmation manuelle ; voir §8
+5.ter. ~~**Cron de purge automatique — 5 TTL**~~ ✅ FAIT — règles draft/24h, payment_pending/1h,
+    email_delivered/48h, zip_created+email_failed/72h (stuck), email_sent/7j (webhook absent) ;
+    détection via email_events pour les règles basées sur transition ; CRON_SECRET en header ;
+    déployer : `npx supabase functions deploy cron-purge` ; voir §8
 6. **AUTH** (Supabase Magic Link + user_id sur rapports + migration RLS anon→authenticated)
 7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté)
 8. **Mode brouillon localStorage** (0.5 j) — discret mais critique
@@ -433,6 +473,7 @@ eIDAS via Yousign, PWA offline complète.
 - [ ] **Mentions légales + CGU/CGV** : à rédiger — clause conservation 48h photos déjà actée, clause valeur probante PDF à ajouter.
 - [ ] **Conformité RGPD** : établir le registre des traitements, rédiger la politique de confidentialité, désigner un DPO (auto-désignation possible à cette échelle).
 - [ ] **Tests utilisateurs** : conduire 5 entretiens bailleurs Leboncoin avant toute dépense publicitaire payante.
+- [ ] **Vérifier le cron-purge en prod** après 1 semaine : contrôler les logs Supabase Cron pour confirmer un passage quotidien réussi (`SELECT * FROM cron.job_run_details WHERE jobname = 'daily-purge' ORDER BY start_time DESC LIMIT 7;`).
 
 ## 🤝 Conventions de travail avec Claude Code
 
