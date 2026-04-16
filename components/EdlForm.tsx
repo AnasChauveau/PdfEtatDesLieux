@@ -310,8 +310,14 @@ export default function EdlForm() {
         setUser(user);
         setUserLoading(false);
       });
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         setUser(session?.user ?? null);
+        // Si l'utilisateur vient de se connecter (depuis un autre onglet via Magic Link) :
+        // fermer la modale auth et avancer à l'étape signature sans attendre de redirect
+        if (event === 'SIGNED_IN') {
+          setShowAuthModal(false);
+          setStep(prev => prev === 3 ? 4 : prev);
+        }
       });
       return () => subscription.unsubscribe();
     }, []);
@@ -464,13 +470,16 @@ export default function EdlForm() {
         setStep(5);
         setSendState('sending');
 
+        // JWT utilisateur requis par le guard zip-and-send (pas l'anon key)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error("Session expirée, veuillez vous reconnecter.");
+
         const functionsUrl = process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL;
-        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
         const efRes = await fetch(`${functionsUrl}/zip-and-send`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
+            'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ rapportId: id }),
         });
