@@ -18,7 +18,8 @@ export async function GET(request: Request) {
     }
   }
 
-  // Redirige vers / avec le flag restoreDraft si le draft est en attente
-  const redirectTo = restoreDraft === 'true' ? `${origin}/?restoreDraft=true` : `${origin}/`;
+  // Si un draft est en attente, on passe par /auth/done qui vérifie si l'onglet
+  // original est encore vivant avant de décider de restaurer ou non.
+  const redirectTo = restoreDraft === 'true' ? `${origin}/auth/done?restoreDraft=true` : `${origin}/`;
   return NextResponse.redirect(redirectTo);
 }

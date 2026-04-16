@@ -315,6 +315,8 @@ export default function EdlForm() {
         // Si l'utilisateur vient de se connecter (depuis un autre onglet via Magic Link) :
         // fermer la modale auth et avancer à l'étape signature sans attendre de redirect
         if (event === 'SIGNED_IN') {
+          // Poser un flag pour que /auth/done sache que cet onglet est vivant
+          localStorage.setItem('edl_auth_handled', Date.now().toString());
           setShowAuthModal(false);
           setStep(prev => prev === 3 ? 4 : prev);
         }
