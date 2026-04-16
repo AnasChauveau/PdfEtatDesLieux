@@ -165,6 +165,23 @@ Deno.serve(async (req: Request) => {
     return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
   }
 
+  // Verify JWT — required now that --no-verify-jwt is removed
+  const authHeader = req.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '').trim();
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
+  }
+  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
+  }
+
   let rapportId: string;
   try {
     const body = await req.json();
@@ -180,7 +197,7 @@ Deno.serve(async (req: Request) => {
   // 1. Fetch the rapport
   const { data: rapport, error: fetchError } = await supabase
     .from('rapports')
-    .select('id, status, data, pdf_url, bailleur_email, client_email, adresse_bien, type_edl')
+    .select('id, status, data, pdf_url, bailleur_email, client_email, adresse_bien, type_edl, user_id')
     .eq('id', rapportId)
     .single();
 
@@ -191,7 +208,15 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // 2. Guard — idempotence: only process from pdf_generated
+  // 2a. Guard — rapport must belong to the authenticated user
+  if (rapport.user_id !== user.id) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
+  }
+
+  // 2b. Guard — idempotence: only process from pdf_generated
   if (rapport.status !== 'pdf_generated') {
     return new Response(
       JSON.stringify({ error: 'Already processed', status: rapport.status }),

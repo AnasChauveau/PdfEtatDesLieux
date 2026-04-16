@@ -322,7 +322,21 @@ Le PDF généré contient une empreinte SHA-256 globale (calculée avant injecti
 
 Cette double empreinte (PDF + photos individuelles) constitue le **différenciateur technique principal** de l'app par rapport à la concurrence (Imodirect, Rentila, Smovin). Aucun outil grand public ne propose cette garantie cryptographique aujourd'hui.
 
-### 10. Pédagogie utilisateur : insister sur la conservation du ZIP
+### 10. Authentification : Magic Link Supabase (étape 6) ✅ FAIT
+
+Auth demandée à la transition **étape 4 → 5** (juste avant signature), pas à l'entrée du site. L'utilisateur peut découvrir et remplir tout le formulaire sans compte. La connexion devient nécessaire au moment de finaliser l'EDL pour permettre la sauvegarde DB, l'envoi mail et l'archivage 9 ans.
+
+- Pas d'INSERT DB ni d'upload Storage avant authentification — données conservées côté client (localStorage + mémoire React)
+- Modale inline avec input email + `signInWithOtp` directement (pas de redirect vers /login)
+- Draft sauvegardé en localStorage (`edl_draft_pending_auth`) avant le Magic Link, restauré au retour via `?restoreDraft=true`
+- Photos irrécupérables après connexion (File objects non sérialisables) → indicateurs visuels "📷 À re-sélectionner"
+- Mode A (connecté) : comportement transparent, aucune modale, photos uploadées immédiatement
+- Mode B (non connecté) : toutes les données en mémoire jusqu'à la clôture
+- RLS scopées `auth.uid() = user_id` sur `rapports` et `email_events`
+- `zip-and-send` redéployée sans `--no-verify-jwt`, guard `rapport.user_id === user.id`
+- Choix UX justifié par les patterns de conversion SaaS (Notion, Calendly) : 3–5× moins de conversions si inscription forcée à l'entrée
+
+### 11. Pédagogie utilisateur : insister sur la conservation du ZIP
 
 La philosophie "Zéro Déchet" implique que les photos originales sont définitivement supprimées 48h après livraison email. Ce choix doit être **explicitement et fermement communiqué** à l'utilisateur à plusieurs endroits du parcours pour éviter qu'il se retrouve sans photos en cas de litige tardif :
 
@@ -458,7 +472,7 @@ eIDAS via Yousign, PWA offline complète.
 
 ## ✅ Checklist avant prod
 
-- [ ] **Auditer et durcir toutes les policies RLS** (actuellement permissives en mode anon pour INSERT/UPDATE/DELETE)
+- [x] **Auditer et durcir toutes les policies RLS** — fait à l'étape 6 : policies anon supprimées, 4 policies `authenticated` scopées `auth.uid() = user_id` sur `rapports`, RLS activée sur `email_events`, Storage policies remplacées par `authenticated`
 - [ ] **Supprimer les photos orphelines** lors du remplacement d'une photo par l'utilisateur : quand une nouvelle photo est uploadée à la place d'une existante, l'ancienne URL est écrasée dans le state mais le fichier reste dans le bucket `photos-etats-des-lieux`. À corriger avant prod.
 - [ ] **Rédiger CGU/CGV** incluant la clause sur le délai de téléchargement des photos (48h) et la valeur probante exclusive du PDF après purge. Clause type : "Le client reconnaît que les photos sont mises à disposition via un lien temporaire de 48h et qu'il lui incombe de les télécharger et archiver dans ce délai. Passé ce délai, seul le PDF fait foi comme document contradictoire."
 - [ ] **Acheter un nom de domaine** et le brancher sur Vercel (Settings → Domains).
