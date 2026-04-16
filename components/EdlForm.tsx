@@ -301,6 +301,9 @@ export default function EdlForm() {
 
     const sigBailleur = useRef<any>(null);
     const sigLocataire = useRef<any>(null);
+    // Largeur mesurée du conteneur signature — synchronise la résolution du canvas avec le rendu réel
+    const sigContainerRef = useRef<HTMLDivElement>(null);
+    const [canvasWidth, setCanvasWidth] = useState(340);
 
     // ── Effects auth ─────────────────────────────────────────────────────────
 
@@ -337,6 +340,19 @@ export default function EdlForm() {
     useEffect(() => {
       return () => { sessionStorage.removeItem('edl_in_progress'); };
     }, []);
+
+    // Mesure la largeur réelle du conteneur signature pour que le canvas
+    // n'ait pas de scaling CSS (évite le décalage de coordonnées de dessin)
+    useEffect(() => {
+      if (!sigContainerRef.current) return;
+      const measure = () => {
+        if (sigContainerRef.current) setCanvasWidth(sigContainerRef.current.clientWidth);
+      };
+      measure();
+      const ro = new ResizeObserver(measure);
+      ro.observe(sigContainerRef.current);
+      return () => ro.disconnect();
+    }, [step]); // re-mesurer quand step=4 apparaît
 
     // Restauration du draft après connexion Magic Link (?restoreDraft=true)
     useEffect(() => {
@@ -1231,8 +1247,8 @@ export default function EdlForm() {
                   {/* Signature Bailleur */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase text-slate-400">Signature du Bailleur</label>
-                    <div className="border-2 border-slate-200 rounded-xl bg-white overflow-hidden">
-                      <SignatureCanvas ref={sigBailleur} canvasProps={{width: 340, height: 160, style: {maxWidth: '100%'}}} />
+                    <div ref={sigContainerRef} className="border-2 border-slate-200 rounded-xl bg-white overflow-hidden">
+                      <SignatureCanvas ref={sigBailleur} canvasProps={{width: canvasWidth, height: 160}} />
                     </div>
                     <button onClick={() => sigBailleur.current.clear()} className="text-[10px] text-slate-400 uppercase">Effacer</button>
                   </div>
@@ -1241,7 +1257,7 @@ export default function EdlForm() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold uppercase text-slate-400">Signature du Locataire</label>
                     <div className="border-2 border-slate-200 rounded-xl bg-white overflow-hidden">
-                      <SignatureCanvas ref={sigLocataire} canvasProps={{width: 340, height: 160, style: {maxWidth: '100%'}}} />
+                      <SignatureCanvas ref={sigLocataire} canvasProps={{width: canvasWidth, height: 160}} />
                     </div>
                     <button onClick={() => sigLocataire.current.clear()} className="text-[10px] text-slate-400 uppercase">Effacer</button>
                   </div>
