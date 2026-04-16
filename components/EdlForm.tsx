@@ -402,6 +402,37 @@ export default function EdlForm() {
 
     // 2. SAUVEGARDE DU RAPPORT — machine à états : draft → pdf_generated → email_sent
     const saveRapport = async (data: any) => {
+      // 0. Upload des photos en attente (Mode B : files stockés en mémoire React, pas encore sur Storage)
+      //    À ce stade l'utilisateur EST authentifié (la modale l'a forcé avant d'arriver ici).
+      if (Object.keys(photoFiles).length > 0) {
+        // Clone profond pour ne pas muter l'objet original
+        data = JSON.parse(JSON.stringify(data));
+
+        await Promise.all(
+          Object.entries(photoFiles).map(async ([key, file]) => {
+            // Choisir le dossier Storage selon le type de photo
+            const folder = key.startsWith('c') ? 'compteurs'
+                         : key.startsWith('p') ? 'pieces'
+                         : 'degats';
+            const result = await uploadToSupabase(file, folder);
+            if (!result) return; // échec silencieux — zip-and-send logge ERREURS.txt
+            // Patcher la bonne entrée dans data
+            if (key === 'c0') {
+              data.compteurs[0] = { ...data.compteurs[0], photo_url: result.url, photo_hash: result.hash };
+            } else if (key === 'c1') {
+              data.compteurs[1] = { ...data.compteurs[1], photo_url: result.url, photo_hash: result.hash };
+            } else if (/^p\d+$/.test(key)) {
+              const pi = parseInt(key.slice(1));
+              data.pieces[pi] = { ...data.pieces[pi], photo_url: result.url, photo_hash: result.hash };
+            } else if (/^e\d+-\d+$/.test(key)) {
+              const [pStr, eStr] = key.slice(1).split('-');
+              const pi = parseInt(pStr), ei = parseInt(eStr);
+              data.pieces[pi].elements[ei] = { ...data.pieces[pi].elements[ei], photo_url: result.url, photo_hash: result.hash };
+            }
+          })
+        );
+      }
+
       // Capturer le timestamp exact de clôture (heure de signature)
       const updatedData = {
         ...data,

@@ -3,7 +3,7 @@
 ## Stack Technique
 - **Framework:** Next.js (App Router), TypeScript, Tailwind CSS
 - **Backend/Storage:** Supabase (Database + Storage)
-- **PDF Generation:** jsPDF + jspdf-autotable
+- **PDF Generation:** pdf-lib
 - **Icons:** Lucide React
 
 ## Conventions de Code
@@ -80,7 +80,7 @@ avec un workflow fluide de ~15 minutes. Avantage concurrentiel = vitesse de gén
   Resend (emailing transactionnel) + TypeScript + Tailwind CSS
 - **Formulaire multi-étapes** fonctionnel : `components/EdlForm.tsx` (5 étapes :
   bien, parties, compteurs, pièces, signature)
-- **Génération PDF** : `lib/pdfGenerator.ts` — **actuellement jsPDF, à migrer vers pdf-lib**
+- **Génération PDF** : `lib/pdfGenerator.ts` — pdf-lib ✅
 - **Icons:** Lucide React (actuellement, mais modifier si besoins)
 - **Signatures** : capturées via Canvas HTML5, insérées en 60x30 dans le PDF
 - **RLS Supabase** : configurée pour upload/delete en mode anon (à auditer avant prod)
@@ -442,16 +442,14 @@ Ordre d'implémentation recommandé :
 
 1. ~~**Machine à états `status`**~~ ✅ FAIT — machine à états + écran de confirmation manuelle
 2. ~~**Migration `jsPDF` → `pdf-lib`**~~ ✅ FAIT — contrôle fin de la mise en page, images, word wrap
-3. **ZIP + Resend + écran de succès** (1 j) — PDF en PJ, ZIP via lien signé Supabase J+2 ;
-    inclut l'écran final "EDL envoyé" (remplace les sous-états A/B/C) avec bouton
-    "Je n'ai pas reçu le mail" et mention de la date de purge automatique
-4. **Refonte PDF** : mentions légales + hash + annexe photos numérotées (1 j)
+3. ~~**ZIP + Resend + écran de succès**~~ ✅ FAIT — PDF en PJ, ZIP via lien signé Supabase J+2 ; écran final "EDL envoyé"
+4. ~~**Refonte PDF**~~ ✅ FAIT — mentions légales + hash SHA-256 + annexe photos numérotées
 5. **Structure `elements[]` + templates de pièces** (1-2 j) — AVANT d'ajouter WC/parking
 5.ter. ~~**Cron de purge automatique — 5 TTL**~~ ✅ FAIT — règles draft/24h, payment_pending/1h,
     email_delivered/48h, zip_created+email_failed/72h (stuck), email_sent/7j (webhook absent) ;
     détection via email_events pour les règles basées sur transition ; CRON_SECRET en header ;
     déployer : `npx supabase functions deploy cron-purge` ; voir §8
-6. **AUTH** (Supabase Magic Link + user_id sur rapports + migration RLS anon→authenticated)
+6. ~~**AUTH**~~ ✅ FAIT — Magic Link + user_id sur rapports + migration RLS anon→authenticated ; upload photos Mode B à la soumission ; page /auth/done pour préserver les photos dans l'onglet original
 7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté)
 8. **Mode brouillon localStorage** (0.5 j) — discret mais critique
 9. **Ajout pièces WC, parking, cave, balcon** (2 h chacune grâce aux templates)
@@ -477,7 +475,7 @@ eIDAS via Yousign, PWA offline complète.
 - [ ] **Rédiger CGU/CGV** incluant la clause sur le délai de téléchargement des photos (48h) et la valeur probante exclusive du PDF après purge. Clause type : "Le client reconnaît que les photos sont mises à disposition via un lien temporaire de 48h et qu'il lui incombe de les télécharger et archiver dans ce délai. Passé ce délai, seul le PDF fait foi comme document contradictoire."
 - [ ] **Acheter un nom de domaine** et le brancher sur Vercel (Settings → Domains).
 - [ ] **Vérifier le domaine dans Resend** (Domains → Add Domain → copier les DNS records) et mettre à jour `RESEND_FROM_EMAIL` dans Vercel ET dans les secrets Supabase (`supabase secrets set RESEND_FROM_EMAIL=...`).
-- [ ] **Configurer Supabase Auth** → Site URL & Redirect URLs avec l'URL Vercel de production au moment de l'étape 6 (Auth Magic Link).
+- [x] **Configurer Supabase Auth** → Site URL & Redirect URLs configurés (localhost + Vercel). ⚠️ Penser à ajouter l'URL de prod définitive après achat du domaine.
 - [ ] **Pas d'action sur les signatures base64 dans le JSONB** : analyse faite, le coût (~15 Ko par rapport) est négligeable à l'échelle visée (largement sous la limite gratuite Supabase 500 Mo, soit ~25 000 rapports). Aucun bénéfice utilisateur, risque de régression. À reconsidérer uniquement si dépassement de 10 000 rapports actifs.
 - [ ] **Compléter le socle Alur dans les pièces** : électricité (prises/interrupteurs) sur toutes les pièces habitables, plomberie/sanitaires en pièces humides, chauffage. Sera traité à l'étape 5 de la roadmap (structure `elements[]` + templates).
 - [ ] **Brancher `archive_json`** : la colonne existe (créée à l'étape 1) mais reste vide. À remplir au moment de la transition vers `email_delivered` avec une version structurée et allégée du rapport (pas de signatures base64, pas d'URLs de photos), pour servir de base à la fonction future "EDL de sortie comparatif". Estimation : ~5 lignes de code, à faire au moment de l'étape "EDL de sortie" post-MVP.
@@ -507,7 +505,7 @@ eIDAS via Yousign, PWA offline complète.
 
 ## 💼 Arguments commerciaux à mettre en avant
 
-Ces formulations sont issues de la conversation d'architecture et constituent les angles de différenciation à utiliser sur la future landing page et lors des échanges avec les premiers clients :
+Ces formulations sont issues de la conversation d'architecture et constituent les angles de différenciation à utiliser sur la future landing page et lors des échanges avec les premiers clients : 
 
 **🔒 Sécurité cryptographique** : "Chaque photo et chaque PDF généré est scellé avec une empreinte SHA-256, le standard de cryptographie utilisé par les banques. En cas de litige, vous pouvez prouver mathématiquement qu'aucun document n'a été modifié depuis sa création. Aucun autre outil d'EDL grand public ne propose cela aujourd'hui."
 
