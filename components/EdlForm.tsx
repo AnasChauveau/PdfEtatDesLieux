@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock } from "lucide-react";
+import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock, Mail, KeyRound } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 import imageCompression from 'browser-image-compression';
 import SignatureCanvas from 'react-signature-canvas';
 import { generateEDL_PDF, injectHashIntoPDF } from '@/lib/pdfGenerator';
@@ -246,6 +247,21 @@ export default function EdlForm() {
     // Modale non-conformité Alur avant étape 5
     const [showAlurModal, setShowAlurModal] = useState(false);
 
+    // ── Auth (étape 6) ───────────────────────────────────────────────────────
+    // user === null → Mode B (non connecté) : photos en mémoire, pas d'INSERT avant signature
+    // user !== null → Mode A (connecté)   : comportement normal
+    const [user, setUser] = useState<SupabaseUser | null>(null);
+    const [userLoading, setUserLoading] = useState(true);
+    // Modale de connexion inline (déclenchée à la transition step 3 → 4)
+    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [authEmail, setAuthEmail] = useState('');
+    const [authStatus, setAuthStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+    const [authError, setAuthError] = useState<string | null>(null);
+    // Photos sélectionnées en mode pré-auth (File en mémoire, non uploadées)
+    const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({});
+    // Clés d'éléments dont la photo a été perdue après reconnexion (file non sérialisable)
+    const [photosLostAfterAuth, setPhotosLostAfterAuth] = useState<string[]>([]);
+
     // États pour stocker les aperçus des photos
     // const [elecPhoto, setElecPhoto] = useState<string | null>(null);
     // const [eauPhoto, setEauPhoto] = useState<string | null>(null);
@@ -285,6 +301,55 @@ export default function EdlForm() {
 
     const sigBailleur = useRef<any>(null);
     const sigLocataire = useRef<any>(null);
+
+    // ── Effects auth ─────────────────────────────────────────────────────────
+
+    // Détection du user courant + écoute temps réel (onAuthStateChange)
+    useEffect(() => {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        setUser(user);
+        setUserLoading(false);
+      });
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+      });
+      return () => subscription.unsubscribe();
+    }, []);
+
+    // Signale au Header qu'un EDL est en cours (bloque déconnexion)
+    useEffect(() => {
+      if (step > 1) {
+        sessionStorage.setItem('edl_in_progress', '1');
+      } else {
+        sessionStorage.removeItem('edl_in_progress');
+      }
+    }, [step]);
+
+    // Nettoyage à la destruction du composant
+    useEffect(() => {
+      return () => { sessionStorage.removeItem('edl_in_progress'); };
+    }, []);
+
+    // Restauration du draft après connexion Magic Link (?restoreDraft=true)
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('restoreDraft') !== 'true') return;
+      const raw = localStorage.getItem('edl_draft_pending_auth');
+      if (!raw) return; // URL trafiquée → ignorer silencieusement
+      try {
+        const saved = JSON.parse(raw);
+        const photoWasPresent: string[] = saved._photo_was_present ?? [];
+        delete saved._photo_was_present;
+        setFormData(saved);
+        setStep(4); // aller directement aux signatures
+        if (photoWasPresent.length > 0) setPhotosLostAfterAuth(photoWasPresent);
+        localStorage.removeItem('edl_draft_pending_auth');
+        window.history.replaceState({}, '', '/');
+      } catch {
+        // JSON corrompu → ignorer
+      }
+    }, []);
 
     // 1. FONCTION UNIVERSELLE D'UPLOAD (Côté Supabase)
     // Retourne { url, hash } où hash = SHA-256 hex du fichier compressé (même octets que dans le ZIP)
@@ -350,6 +415,7 @@ export default function EdlForm() {
             type_edl: updatedData.metadata.type,
             is_paid: false,
             status: 'draft' satisfies RapportStatus,
+            user_id: user?.id ?? null,
           }])
           .select('id')
           .single();
@@ -742,23 +808,28 @@ export default function EdlForm() {
                   }}
                 />
                 <PhotoSelector
-                  hasPhoto={!!formData.compteurs[0].photo_url}
+                  hasPhoto={!!formData.compteurs[0].photo_url || !!photoFiles['c0']}
                   isUploading={uploadingKey === 'c0'}
                   onPhotoSelected={async (file) => {
-                    setUploadingKey('c0');
-                    const result = await uploadToSupabase(file, "compteurs");
-                    if (result) {
-                      const newCompteurs = [...formData.compteurs];
-                      newCompteurs[0] = { ...newCompteurs[0], photo_url: result.url, photo_hash: result.hash };
-                      setFormData({...formData, compteurs: newCompteurs});
+                    if (user) {
+                      setUploadingKey('c0');
+                      const result = await uploadToSupabase(file, "compteurs");
+                      if (result) {
+                        const newCompteurs = [...formData.compteurs];
+                        newCompteurs[0] = { ...newCompteurs[0], photo_url: result.url, photo_hash: result.hash };
+                        setFormData({...formData, compteurs: newCompteurs});
+                      }
+                      setUploadingKey(null);
+                    } else {
+                      setPhotoFiles(prev => ({ ...prev, c0: file }));
                     }
-                    setUploadingKey(null);
                   }}
                   onPhotoDeleted={() => {
-                    if (formData.compteurs[0].photo_url) deletePhotoFromBucket(formData.compteurs[0].photo_url);
+                    if (user && formData.compteurs[0].photo_url) deletePhotoFromBucket(formData.compteurs[0].photo_url);
                     const newCompteurs = [...formData.compteurs];
                     newCompteurs[0] = { ...newCompteurs[0], photo_url: '', photo_hash: '' };
                     setFormData({...formData, compteurs: newCompteurs});
+                    setPhotoFiles(prev => { const n = { ...prev }; delete n['c0']; return n; });
                   }}
                 />
               </div>
@@ -791,23 +862,28 @@ export default function EdlForm() {
                   }}
                 />
                 <PhotoSelector
-                  hasPhoto={!!formData.compteurs[1].photo_url}
+                  hasPhoto={!!formData.compteurs[1].photo_url || !!photoFiles['c1']}
                   isUploading={uploadingKey === 'c1'}
                   onPhotoSelected={async (file) => {
-                    setUploadingKey('c1');
-                    const result = await uploadToSupabase(file, "compteurs");
-                    if (result) {
-                      const newCompteurs = [...formData.compteurs];
-                      newCompteurs[1] = { ...newCompteurs[1], photo_url: result.url, photo_hash: result.hash };
-                      setFormData({...formData, compteurs: newCompteurs});
+                    if (user) {
+                      setUploadingKey('c1');
+                      const result = await uploadToSupabase(file, "compteurs");
+                      if (result) {
+                        const newCompteurs = [...formData.compteurs];
+                        newCompteurs[1] = { ...newCompteurs[1], photo_url: result.url, photo_hash: result.hash };
+                        setFormData({...formData, compteurs: newCompteurs});
+                      }
+                      setUploadingKey(null);
+                    } else {
+                      setPhotoFiles(prev => ({ ...prev, c1: file }));
                     }
-                    setUploadingKey(null);
                   }}
                   onPhotoDeleted={() => {
-                    if (formData.compteurs[1].photo_url) deletePhotoFromBucket(formData.compteurs[1].photo_url);
+                    if (user && formData.compteurs[1].photo_url) deletePhotoFromBucket(formData.compteurs[1].photo_url);
                     const newCompteurs = [...formData.compteurs];
                     newCompteurs[1] = { ...newCompteurs[1], photo_url: '', photo_hash: '' };
                     setFormData({...formData, compteurs: newCompteurs});
+                    setPhotoFiles(prev => { const n = { ...prev }; delete n['c1']; return n; });
                   }}
                 />
               </div>
@@ -853,23 +929,28 @@ export default function EdlForm() {
                       <div className="flex items-center gap-2">
                         <PhotoSelector
                           compact
-                          hasPhoto={!!piece.photo_url}
+                          hasPhoto={!!piece.photo_url || !!photoFiles[`p${pIndex}`]}
                           isUploading={uploadingKey === `p${pIndex}`}
                           onPhotoSelected={async (file) => {
-                            setUploadingKey(`p${pIndex}`);
-                            const result = await uploadToSupabase(file, "pieces");
-                            if (result) {
-                              const newPieces = [...formData.pieces];
-                              newPieces[pIndex] = { ...newPieces[pIndex], photo_url: result.url, photo_hash: result.hash };
-                              setFormData({...formData, pieces: newPieces});
+                            if (user) {
+                              setUploadingKey(`p${pIndex}`);
+                              const result = await uploadToSupabase(file, "pieces");
+                              if (result) {
+                                const newPieces = [...formData.pieces];
+                                newPieces[pIndex] = { ...newPieces[pIndex], photo_url: result.url, photo_hash: result.hash };
+                                setFormData({...formData, pieces: newPieces});
+                              }
+                              setUploadingKey(null);
+                            } else {
+                              setPhotoFiles(prev => ({ ...prev, [`p${pIndex}`]: file }));
                             }
-                            setUploadingKey(null);
                           }}
                           onPhotoDeleted={() => {
-                            if (piece.photo_url) deletePhotoFromBucket(piece.photo_url);
+                            if (user && piece.photo_url) deletePhotoFromBucket(piece.photo_url);
                             const newPieces = [...formData.pieces];
                             newPieces[pIndex] = { ...newPieces[pIndex], photo_url: undefined, photo_hash: undefined };
                             setFormData({ ...formData, pieces: newPieces });
+                            setPhotoFiles(prev => { const n = { ...prev }; delete n[`p${pIndex}`]; return n; });
                           }}
                         />
                         {/* Bouton supprimer — icône seule */}
@@ -910,23 +991,28 @@ export default function EdlForm() {
                             {['moyen', 'mauvais', 'hs'].includes(el.etat) && (
                               <PhotoSelector
                                 compact
-                                hasPhoto={!!el.photo_url}
+                                hasPhoto={!!el.photo_url || !!photoFiles[`e${pIndex}-${eIndex}`]}
                                 isUploading={uploadingKey === `e${pIndex}-${eIndex}`}
                                 onPhotoSelected={async (file) => {
-                                  setUploadingKey(`e${pIndex}-${eIndex}`);
-                                  const result = await uploadToSupabase(file, "degats");
-                                  if (result) {
-                                    const newPieces = [...formData.pieces];
-                                    newPieces[pIndex].elements[eIndex] = {
-                                      ...newPieces[pIndex].elements[eIndex],
-                                      photo_url: result.url,
-                                      photo_hash: result.hash,
-                                    };
-                                    setFormData({ ...formData, pieces: newPieces });
+                                  if (user) {
+                                    setUploadingKey(`e${pIndex}-${eIndex}`);
+                                    const result = await uploadToSupabase(file, "degats");
+                                    if (result) {
+                                      const newPieces = [...formData.pieces];
+                                      newPieces[pIndex].elements[eIndex] = {
+                                        ...newPieces[pIndex].elements[eIndex],
+                                        photo_url: result.url,
+                                        photo_hash: result.hash,
+                                      };
+                                      setFormData({ ...formData, pieces: newPieces });
+                                    }
+                                    setUploadingKey(null);
+                                  } else {
+                                    setPhotoFiles(prev => ({ ...prev, [`e${pIndex}-${eIndex}`]: file }));
                                   }
-                                  setUploadingKey(null);
                                 }}
                                 onPhotoDeleted={() => {
+                                  if (user && el.photo_url) deletePhotoFromBucket(el.photo_url);
                                   const newPieces = [...formData.pieces];
                                   newPieces[pIndex].elements[eIndex] = {
                                     ...newPieces[pIndex].elements[eIndex],
@@ -934,6 +1020,7 @@ export default function EdlForm() {
                                     photo_hash: undefined,
                                   };
                                   setFormData({ ...formData, pieces: newPieces });
+                                  setPhotoFiles(prev => { const n = { ...prev }; delete n[`e${pIndex}-${eIndex}`]; return n; });
                                 }}
                               />
                             )}
@@ -1066,6 +1153,17 @@ export default function EdlForm() {
                 </button>
                 <button
                   onClick={() => {
+                    // Mode B — non connecté : sauvegarder le draft et afficher la modale auth
+                    if (!user && !userLoading) {
+                      const draftToSave = {
+                        ...formData,
+                        _photo_was_present: Object.keys(photoFiles),
+                      };
+                      localStorage.setItem('edl_draft_pending_auth', JSON.stringify(draftToSave));
+                      setShowAuthModal(true);
+                      return;
+                    }
+                    // Mode A — connecté : vérification Alur puis passage aux signatures
                     if (formData.pieces.length > 0 && !isAlurCompliant()) {
                       setShowAlurModal(true);
                     } else {
@@ -1422,6 +1520,134 @@ export default function EdlForm() {
           </div>
         );
       })()}
+
+      {/* ── Bandeau photos perdues après reconnexion ─────────────────────── */}
+      {photosLostAfterAuth.length > 0 && (
+        <div className="mx-4 mb-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs text-amber-800">
+          <Camera size={14} className="shrink-0 mt-0.5" />
+          <span>
+            <strong>📷 Photos à re-sélectionner</strong> — vos fichiers photos n'ont pas pu être conservés lors de la connexion. Veuillez les re-sélectionner sur les éléments concernés.
+          </span>
+          <button
+            type="button"
+            onClick={() => setPhotosLostAfterAuth([])}
+            className="ml-auto shrink-0 text-amber-600 hover:text-amber-900"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ── Modale d'authentification Magic Link ────────────────────────── */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 sm:p-6 animate-in slide-in-from-bottom-4 sm:zoom-in-95">
+            {/* En-tête */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                <KeyRound size={18} className="text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base leading-tight">
+                  Dernière étape avant la signature
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Créez votre compte en 10 secondes — sans mot de passe
+                </p>
+              </div>
+            </div>
+
+            {authStatus === 'sent' ? (
+              /* État envoyé */
+              <div className="text-center py-3">
+                <CheckCircle2 size={36} className="text-green-500 mx-auto mb-3" />
+                <p className="text-sm font-bold text-slate-900 mb-1">Vérifiez votre boîte mail</p>
+                <p className="text-xs text-slate-500">
+                  Lien envoyé à <span className="font-semibold text-slate-700">{authEmail}</span>.
+                  Cliquez dessus pour finaliser votre EDL.
+                </p>
+                <p className="text-xs text-slate-400 mt-3">
+                  Pas reçu ?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setAuthStatus('idle'); setAuthError(null); }}
+                    className="text-blue-500 hover:underline"
+                  >
+                    Réessayer
+                  </button>
+                </p>
+              </div>
+            ) : (
+              /* Formulaire */
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    Votre adresse email
+                  </label>
+                  <div className="relative">
+                    <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={(e) => { setAuthEmail(e.target.value); setAuthError(null); }}
+                      placeholder="votre@email.fr"
+                      autoComplete="email"
+                      autoFocus
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition"
+                    />
+                  </div>
+                  {authError && (
+                    <p className="mt-1.5 text-xs text-red-600">{authError}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!authEmail.trim() || authStatus === 'sending') return;
+                      setAuthStatus('sending');
+                      setAuthError(null);
+                      const origin = window.location.origin;
+                      const { error } = await supabase.auth.signInWithOtp({
+                        email: authEmail.trim(),
+                        options: { emailRedirectTo: `${origin}/auth/callback?restoreDraft=true` },
+                      });
+                      if (error) {
+                        setAuthError('Une erreur est survenue. Vérifiez votre email et réessayez.');
+                        setAuthStatus('idle');
+                      } else {
+                        setAuthStatus('sent');
+                      }
+                    }}
+                    disabled={!authEmail.trim() || authStatus === 'sending'}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    {authStatus === 'sending' ? (
+                      <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Envoi…</>
+                    ) : (
+                      <><Mail size={14} /> Recevoir mon lien</>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAuthModal(false);
+                      setAuthStatus('idle');
+                      setAuthEmail('');
+                      setAuthError(null);
+                      localStorage.removeItem('edl_draft_pending_auth');
+                    }}
+                    className="flex-1 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition"
+                  >
+                    ← Continuer à modifier
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
