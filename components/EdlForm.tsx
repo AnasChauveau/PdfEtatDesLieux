@@ -273,7 +273,6 @@ export default function EdlForm() {
         date: new Date().toISOString().split('T')[0],
         adresse_bien: "",
         lieu_signature: "",
-        isJeanbrun: false,
         cles: "",
         autres_acces: "",
         chauffage: "",
@@ -561,41 +560,33 @@ export default function EdlForm() {
     // Crée une petite variable de validation pour Step 1
     const isStep1Valid = () => {
       const m = formData.metadata;
-      const basicInfo = 
-      m.adresse_bien.length > 5 && 
-      m.bailleur.nom.length > 2 &&
-      m.bailleur.email.includes('@') && 
-      m.locataire.nom.length > 2 &&
-      m.locataire.email.includes('@') &&
-      m.cles && 
-      m.chauffage;
-      
-      // Si c'est Jeanbrun, le cadastre est obligatoire. Sinon, non.
-      if (m.isJeanbrun) {
-        return basicInfo && m.cadastre.length > 0;
-      }
-
-      return basicInfo;
+      const baseOk =
+        m.adresse_bien.length > 5 &&
+        m.bailleur.nom.length > 2 &&
+        m.bailleur.adresse.length > 3 &&
+        m.bailleur.email.includes('@') &&
+        m.locataire.nom.length > 2 &&
+        m.locataire.email.includes('@') &&
+        m.cles &&
+        m.chauffage;
+      if (m.type === 'Sortie') return !!(baseOk && m.locataire.nouvelle_adresse.length > 3);
+      return !!baseOk;
     };
 
-      // Crée une petite variable de validation pour Step 2
+    // Crée une petite variable de validation pour Step 2
     const isStep2Valid = () => {
       const m = formData.metadata;
-      const basicInfo =
-      m.adresse_bien.length > 5 &&
-      m.bailleur.nom.length > 2 &&
-      m.bailleur.email.includes('@') &&
-      m.locataire.nom.length > 2 &&
-      m.locataire.email.includes('@') &&
-      m.cles &&
-      m.chauffage;
-
-      // Si c'est Jeanbrun, le cadastre est obligatoire. Sinon, non.
-      if (m.isJeanbrun) {
-        return basicInfo && m.cadastre.length > 0;
-      }
-
-      return basicInfo;
+      const baseOk =
+        m.adresse_bien.length > 5 &&
+        m.bailleur.nom.length > 2 &&
+        m.bailleur.adresse.length > 3 &&
+        m.bailleur.email.includes('@') &&
+        m.locataire.nom.length > 2 &&
+        m.locataire.email.includes('@') &&
+        m.cles &&
+        m.chauffage;
+      if (m.type === 'Sortie') return !!(baseOk && m.locataire.nouvelle_adresse.length > 3);
+      return !!baseOk;
     };
 
     // ── Handlers Step 3 ──────────────────────────────────────────────────────
@@ -678,8 +669,33 @@ export default function EdlForm() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:gap-4">
-              
-              <div className="grid grid-cols-2 min-[480px]:grid-cols-3 gap-3 md:gap-4">
+
+              {/* Logement meublé — radio Oui / Non */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold uppercase text-slate-400">Logement meublé</label>
+                <div className="flex gap-5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio" name="meuble" value="oui"
+                      className="accent-blue-600"
+                      checked={formData.metadata.meuble === true}
+                      onChange={() => setFormData({...formData, metadata: {...formData.metadata, meuble: true}})}
+                    />
+                    <span className="text-sm text-slate-700">Oui</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio" name="meuble" value="non"
+                      className="accent-blue-600"
+                      checked={formData.metadata.meuble === false}
+                      onChange={() => setFormData({...formData, metadata: {...formData.metadata, meuble: false}})}
+                    />
+                    <span className="text-sm text-slate-700">Non</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-3 md:gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Type d'acte</label>
                   <select
@@ -699,18 +715,6 @@ export default function EdlForm() {
                     value={formData.metadata.date}
                     onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, date: e.target.value}})}
                   />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold uppercase text-slate-400">Meublé</label>
-                  <label className="flex items-center gap-2 h-[46px] cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5 accent-blue-600"
-                      checked={formData.metadata.meuble}
-                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, meuble: e.target.checked}})}
-                    />
-                    <span className="text-sm text-slate-700">{formData.metadata.meuble ? 'Oui' : 'Non'}</span>
-                  </label>
                 </div>
               </div>
               
@@ -752,7 +756,7 @@ export default function EdlForm() {
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, nom: e.target.value}}})}
                 />
                 <input
-                  type="text" placeholder="Adresse du bailleur (Ex: 12 rue de la Paix, 75002 Paris)"
+                  type="text" placeholder="Adresse du bailleur"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
                   value={formData.metadata.bailleur.adresse}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, adresse: e.target.value}}})}
@@ -871,18 +875,6 @@ export default function EdlForm() {
 
             <div className="p-3 md:p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 md:space-y-4">
   
-              <div className="flex items-center justify-between">
-                <label className="font-bold text-sm md:text-base text-slate-700">
-                  Dispositif Jeanbrun 2026 ?
-                </label>
-                <input 
-                  type="checkbox" 
-                  className="w-6 h-6 accent-blue-600"
-                  checked={formData.metadata.isJeanbrun}
-                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, isJeanbrun: e.target.checked}})}
-                />
-              </div>
-
               <div className="grid grid-cols-1 min-[450px]:grid-cols-[1fr_2fr] gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-bold uppercase text-slate-400">Nombre de clés</label>
@@ -923,13 +915,13 @@ export default function EdlForm() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className={`text-xs font-bold uppercase ${formData.metadata.isJeanbrun ? 'text-orange-500' : 'text-slate-400'}`}>
-                  Réf. Cadastrale {formData.metadata.isJeanbrun ? '(Obligatoire)' : '(Optionnel)'}
+                <label className="text-xs font-bold uppercase text-slate-400">
+                  Réf. Cadastrale (Optionnel)
                 </label>
-                <input 
-                  type="text" 
-                  placeholder={formData.metadata.isJeanbrun ? "Ex: 000 AB 121" : "Ex: 000 AB 121"}
-                  className={`w-full p-2.5 md:p-3 rounded-xl border ${formData.metadata.isJeanbrun ? 'border-orange-300 bg-orange-50' : 'border-white bg-white'}`}
+                <input
+                  type="text"
+                  placeholder="Ex: 000 AB 121"
+                  className="w-full p-2.5 md:p-3 rounded-xl border border-white bg-white"
                   value={formData.metadata.cadastre}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, cadastre: e.target.value}})}
                 />
@@ -1078,7 +1070,7 @@ export default function EdlForm() {
 
               <div className="flex gap-2 min-w-0">
                 <input
-                  type="number" placeholder="Index m³"
+                  type="number" placeholder="En m³"
                   className="flex-1 min-w-0 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   value={formData.compteurs[2].index}
                   onChange={(e) => {
