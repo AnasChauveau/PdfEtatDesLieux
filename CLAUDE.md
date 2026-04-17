@@ -444,16 +444,16 @@ Ordre d'implémentation recommandé :
 2. ~~**Migration `jsPDF` → `pdf-lib`**~~ ✅ FAIT — contrôle fin de la mise en page, images, word wrap
 3. ~~**ZIP + Resend + écran de succès**~~ ✅ FAIT — PDF en PJ, ZIP via lien signé Supabase J+2 ; écran final "EDL envoyé"
 4. ~~**Refonte PDF**~~ ✅ FAIT — mentions légales + hash SHA-256 + annexe photos numérotées
-5. **Structure `elements[]` + templates de pièces** (1-2 j) — AVANT d'ajouter WC/parking
+5. ~~**Structure `elements[]` + templates de pièces**~~ ✅ FAIT — AVANT d'ajouter WC/parking
 5.ter. ~~**Cron de purge automatique — 5 TTL**~~ ✅ FAIT — règles draft/24h, payment_pending/1h,
     email_delivered/48h, zip_created+email_failed/72h (stuck), email_sent/7j (webhook absent) ;
     détection via email_events pour les règles basées sur transition ; CRON_SECRET en header ;
     déployer : `npx supabase functions deploy cron-purge` ; voir §8
 6. ~~**AUTH**~~ ✅ FAIT — Magic Link + user_id sur rapports + migration RLS anon→authenticated ; upload photos Mode B à la soumission ; page /auth/done pour préserver les photos dans l'onglet original
-7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté)
-8. **Mode brouillon localStorage** (0.5 j) — discret mais critique
-9. **Ajout pièces WC, parking, cave, balcon** (2 h chacune grâce aux templates)
-10. **Badge "Conforme Loi Alur"** (2 h)
+7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté) ✅ FAIT
+8. **Mode brouillon localStorage** (0.5 j) — discret mais critique ✅ FAIT
+9. **Ajout pièces WC, parking, cave, balcon** ✅ FAIT
+10. **Badge "Conforme Loi Alur"** ✅ FAIT
 11. **Intégration Stripe Checkout** (1 j) — statuts `payment_pending` et `paid` ; le webhook
     `payment_intent.succeeded` devient le déclencheur de la génération PDF à la place de
     l'INSERT direct. À faire après la refonte PDF (#4) pour ne pas payer un PDF bancal.
