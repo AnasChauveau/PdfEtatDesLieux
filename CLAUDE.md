@@ -322,14 +322,15 @@ Le PDF généré contient une empreinte SHA-256 globale (calculée avant injecti
 
 Cette double empreinte (PDF + photos individuelles) constitue le **différenciateur technique principal** de l'app par rapport à la concurrence (Imodirect, Rentila, Smovin). Aucun outil grand public ne propose cette garantie cryptographique aujourd'hui.
 
-### 10. Authentification : Magic Link Supabase (étape 6) ✅ FAIT
+### 10. Authentification : OTP code 6 chiffres Supabase (étape 6) ✅ FAIT
 
 Auth demandée à la transition **étape 4 → 5** (juste avant signature), pas à l'entrée du site. L'utilisateur peut découvrir et remplir tout le formulaire sans compte. La connexion devient nécessaire au moment de finaliser l'EDL pour permettre la sauvegarde DB, l'envoi mail et l'archivage 9 ans.
 
 - Pas d'INSERT DB ni d'upload Storage avant authentification - données conservées côté client (localStorage + mémoire React)
-- Modale inline avec input email + `signInWithOtp` directement (pas de redirect vers /login)
-- Draft sauvegardé en localStorage (`edl_draft_pending_auth`) avant le Magic Link, restauré au retour via `?restoreDraft=true`
-- Photos irrécupérables après connexion (File objects non sérialisables) → indicateurs visuels "📷 À re-sélectionner"
+- Modale inline OTP 3 étapes : email → code 6 chiffres → fermeture (l'utilisateur ne quitte jamais la page)
+- Photos conservées en mémoire React pendant toute la connexion (pas de redirect = pas de perte)
+- Auto-submit du code à 6 chiffres, cooldown 60s pour renvoyer, clavier numérique sur mobile
+- `/auth/callback` et `/auth/done` supprimés — plus nécessaires avec l'OTP
 - Mode A (connecté) : comportement transparent, aucune modale, photos uploadées immédiatement
 - Mode B (non connecté) : toutes les données en mémoire jusqu'à la clôture
 - RLS scopées `auth.uid() = user_id` sur `rapports` et `email_events`
@@ -449,7 +450,7 @@ Ordre d'implémentation recommandé :
     email_delivered/48h, zip_created+email_failed/72h (stuck), email_sent/7j (webhook absent) ;
     détection via email_events pour les règles basées sur transition ; CRON_SECRET en header ;
     déployer : `npx supabase functions deploy cron-purge` ; voir §8
-6. ~~**AUTH**~~ ✅ FAIT - Magic Link + user_id sur rapports + migration RLS anon→authenticated ; upload photos Mode B à la soumission ; page /auth/done pour préserver les photos dans l'onglet original
+6. ~~**AUTH**~~ ✅ FAIT — OTP code 6 chiffres (remplace Magic Link) ; user_id sur rapports ; RLS anon→authenticated ; upload photos Mode B à la soumission ; photos conservées en mémoire (pas de redirect)
 7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté) ✅ FAIT
 8. **Mode brouillon localStorage** (0.5 j) - discret mais critique ✅ FAIT
 9. **Ajout pièces WC, parking, cave, balcon** ✅ FAIT
@@ -457,8 +458,7 @@ Ordre d'implémentation recommandé :
 11. **Intégration Stripe Checkout** (1 j) - statuts `payment_pending` et `paid` ; le webhook
     `payment_intent.succeeded` devient le déclencheur de la génération PDF à la place de
     l'INSERT direct. À faire après la refonte PDF (#4) pour ne pas payer un PDF bancal.
-    ⚠️ L'app utilisera Supabase Auth (Magic Link email). Pour l'instant on continue en mode
-    anon. L'auth sera intégrée à l'étape Auth (#6) de la roadmap. Ne crée aucune dépendance
+    ⚠️ L'app utilise Supabase Auth (OTP email). L'auth est intégrée (étape 6 ✅). Ne crée aucune dépendance
     à l'authentification dans cette étape.
 12. **Cron Supabase quotidien - archivage 9 ans** (2 h) - supprime les rapports dont
     `archive_expires_at` est dépassé (PDF + archive_json). Distinct du cron de purge 5.ter.
