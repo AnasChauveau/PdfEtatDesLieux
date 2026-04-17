@@ -366,6 +366,8 @@ export default function EdlForm() {
       if (typeof window === 'undefined') return;
       const params = new URLSearchParams(window.location.search);
       if (params.get('restoreDraft') === 'true') return;
+      // Flux auth en cours → ne pas afficher le banner (edl_draft_pending_auth prend le relai)
+      if (localStorage.getItem('edl_draft_pending_auth')) return;
       const raw = localStorage.getItem('edl_draft_autosave');
       if (!raw) return;
       try {
@@ -1447,6 +1449,9 @@ export default function EdlForm() {
                         _photo_was_present: Object.keys(photoFiles),
                       };
                       localStorage.setItem('edl_draft_pending_auth', JSON.stringify(draftToSave));
+                      // L'auto-save n'a plus lieu d'être : edl_draft_pending_auth prend le relai
+                      localStorage.removeItem('edl_draft_autosave');
+                      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
                       setShowAuthModal(true);
                       return;
                     }
