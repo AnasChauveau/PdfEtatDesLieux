@@ -71,7 +71,7 @@ function AuthDoneContent() {
               href="/?restoreDraft=true"
               className="mt-2 text-xs text-blue-600 hover:underline"
             >
-              Ou reprendre ici si l'autre onglet est fermé →
+              Ou reprendre ici si l'autre onglet est fermé (photo perdu dans ce cas) →
             </a>
           )}
         </div>
