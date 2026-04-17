@@ -261,6 +261,9 @@ export default function EdlForm() {
     const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({});
     // Clés d'éléments dont la photo a été perdue après reconnexion (file non sérialisable)
     const [photosLostAfterAuth, setPhotosLostAfterAuth] = useState<string[]>([]);
+    // Brouillon auto-sauvegardé retrouvé au chargement de la page
+    const [draftBanner, setDraftBanner] = useState<{ savedAt: number; step: number; formData: any } | null>(null);
+    const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // États pour stocker les aperçus des photos
     // const [elecPhoto, setElecPhoto] = useState<string | null>(null);
@@ -343,6 +346,36 @@ export default function EdlForm() {
     // Nettoyage à la destruction du composant
     useEffect(() => {
       return () => { sessionStorage.removeItem('edl_in_progress'); };
+    }, []);
+
+    // Auto-save du brouillon en localStorage (déclenché à chaque changement formData/step)
+    useEffect(() => {
+      if (!formData.metadata.adresse_bien || sendState !== 'idle') return;
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        localStorage.setItem('edl_draft_autosave', JSON.stringify({ step, formData, savedAt: Date.now() }));
+      }, 1500);
+      return () => {
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData, step]);
+
+    // Détection d'un brouillon auto-sauvegardé au chargement (sauf si on restaure depuis auth)
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('restoreDraft') === 'true') return;
+      const raw = localStorage.getItem('edl_draft_autosave');
+      if (!raw) return;
+      try {
+        const saved = JSON.parse(raw);
+        if (saved.formData && saved.step && saved.savedAt) {
+          setDraftBanner(saved);
+        }
+      } catch {
+        localStorage.removeItem('edl_draft_autosave');
+      }
     }, []);
 
     // Mesure la largeur réelle du conteneur signature pour que le canvas
@@ -539,6 +572,7 @@ export default function EdlForm() {
 
         if (efRes.ok) {
           setSendState('success');
+          localStorage.removeItem('edl_draft_autosave');
         } else {
           const body = await efRes.json().catch(() => ({})) as { error?: string; canRetry?: boolean };
           if (body.canRetry) {
@@ -640,7 +674,43 @@ export default function EdlForm() {
       return missing;
     };
 
+  const formatBannerDate = (ts: number) =>
+    new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
   return (
+    <>
+    {/* Bannière brouillon retrouvé */}
+    {draftBanner && (
+      <div className="mb-3 flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm">
+        <span className="text-amber-800">
+          Brouillon du <strong>{formatBannerDate(draftBanner.savedAt)}</strong> retrouvé.
+        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setFormData(draftBanner.formData);
+              setStep(draftBanner.step);
+              setDraftBanner(null);
+              localStorage.removeItem('edl_draft_autosave');
+            }}
+            className="text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition"
+          >
+            Reprendre
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDraftBanner(null);
+              localStorage.removeItem('edl_draft_autosave');
+            }}
+            className="text-xs text-amber-600 hover:text-amber-800 transition"
+          >
+            Ignorer
+          </button>
+        </div>
+      </div>
+    )}
     <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
       {/* Progress Bar */}
       <div className="bg-slate-50 border-b border-slate-100 p-4 flex justify-between items-center">
@@ -1867,5 +1937,6 @@ export default function EdlForm() {
       )}
 
     </div>
+    </>
   );
 }
