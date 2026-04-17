@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock, Mail, KeyRound } from "lucide-react";
+import { Camera, ImageIcon, User, MapPin, Calendar, ArrowRight, CheckCircle2, Trash2, Lock, Mail, KeyRound, Flame } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import imageCompression from 'browser-image-compression';
@@ -268,6 +268,7 @@ export default function EdlForm() {
 
     const [formData, setFormData] = useState({
       metadata: {
+        meuble: false,
         type: "Entrée",
         date: new Date().toISOString().split('T')[0],
         adresse_bien: "",
@@ -278,12 +279,16 @@ export default function EdlForm() {
         chauffage: "",
         cadastre: "",
         bailleur: { nom: "", adresse: "", email: "" },
-        locataire: { nom: "", email: "" },
-        mandataire: { nom: "", entreprise: "" } // Optionnel pour les agences
+        bailleur_represente: false,
+        mandataire_bailleur: { nom: "", email: "", qualite: "" },
+        locataire: { nom: "", email: "", nouvelle_adresse: "" },
+        locataire_represente: false,
+        mandataire_locataire: { nom: "", email: "", qualite: "" },
       },
       compteurs: [
         { type: "Électricité", index: "", photo_url: "", photo_hash: "" },
-        { type: "Eau Froide", index: "", photo_url: "", photo_hash: "" }
+        { type: "Eau Froide", index: "", photo_url: "", photo_hash: "" },
+        { type: "Gaz", index: "", photo_url: "", photo_hash: "" },
       ],
       pieces: [] as any[],
       signatureBailleur: "",
@@ -674,10 +679,10 @@ export default function EdlForm() {
 
             <div className="grid grid-cols-1 gap-3 md:gap-4">
               
-              <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-3 md:gap-4">
+              <div className="grid grid-cols-2 min-[480px]:grid-cols-3 gap-3 md:gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Type d'acte</label>
-                  <select 
+                  <select
                     className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 font-medium"
                     value={formData.metadata.type}
                     onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, type: e.target.value}})}
@@ -688,12 +693,24 @@ export default function EdlForm() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Date du constat</label>
-                  <input 
-                    type="date" 
+                  <input
+                    type="date"
                     className="w-full p-2.5 rounded-xl border border-slate-300 bg-slate-50"
                     value={formData.metadata.date}
                     onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, date: e.target.value}})}
                   />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold uppercase text-slate-400">Meublé</label>
+                  <label className="flex items-center gap-2 h-[46px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 accent-blue-600"
+                      checked={formData.metadata.meuble}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, meuble: e.target.checked}})}
+                    />
+                    <span className="text-sm text-slate-700">{formData.metadata.meuble ? 'Oui' : 'Non'}</span>
+                  </label>
                 </div>
               </div>
               
@@ -723,40 +740,132 @@ export default function EdlForm() {
             <hr className="border-slate-100" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+              {/* ── Bailleur ── */}
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-2">
                   <User size={16} className="text-blue-600" /> Bailleur
                 </h3>
-                <input 
+                <input
                   type="text" placeholder="Nom complet / Raison sociale"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
                   value={formData.metadata.bailleur.nom}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, nom: e.target.value}}})}
                 />
-                <input 
+                <input
+                  type="text" placeholder="Adresse du bailleur (Ex: 12 rue de la Paix, 75002 Paris)"
+                  className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                  value={formData.metadata.bailleur.adresse}
+                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, adresse: e.target.value}}})}
+                />
+                <input
                   type="email" placeholder="Email du Bailleur"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
                   value={formData.metadata.bailleur.email}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, email: e.target.value}}})}
                 />
+                {/* Représentation bailleur */}
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 accent-blue-600"
+                    checked={formData.metadata.bailleur_represente}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur_represente: e.target.checked}})}
+                  />
+                  <span className="text-sm text-slate-600">Bailleur représenté ?</span>
+                </label>
+                {formData.metadata.bailleur_represente && (
+                  <div className="space-y-2 pl-2 border-l-2 border-blue-200">
+                    <input
+                      type="text" placeholder="Nom du mandataire"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-sm"
+                      value={formData.metadata.mandataire_bailleur.nom}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, mandataire_bailleur: {...formData.metadata.mandataire_bailleur, nom: e.target.value}}})}
+                    />
+                    <input
+                      type="email" placeholder="Email du mandataire"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-sm"
+                      value={formData.metadata.mandataire_bailleur.email}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, mandataire_bailleur: {...formData.metadata.mandataire_bailleur, email: e.target.value}}})}
+                    />
+                    <select
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-sm bg-white"
+                      value={formData.metadata.mandataire_bailleur.qualite}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, mandataire_bailleur: {...formData.metadata.mandataire_bailleur, qualite: e.target.value}}})}
+                    >
+                      <option value="">Qualité du mandataire...</option>
+                      <option>Agence immobilière</option>
+                      <option>Gestionnaire / administrateur</option>
+                      <option>Proche / tiers mandaté</option>
+                      <option>Commissaire de justice</option>
+                      <option>Autre</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
+              {/* ── Locataire ── */}
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-2">
                   <User size={16} className="text-blue-600" /> Locataire
                 </h3>
-                <input 
+                <input
                   type="text" placeholder="Nom et Prénom"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
                   value={formData.metadata.locataire.nom}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, nom: e.target.value}}})}
                 />
-                <input 
+                <input
                   type="email" placeholder="Email du Locataire"
                   className="w-full p-3 rounded-xl border border-slate-300 text-sm"
                   value={formData.metadata.locataire.email}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, email: e.target.value}}})}
                 />
+                {formData.metadata.type === "Sortie" && (
+                  <input
+                    type="text" placeholder="Nouvelle adresse du locataire"
+                    className="w-full p-3 rounded-xl border border-slate-300 text-sm"
+                    value={formData.metadata.locataire.nouvelle_adresse}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, nouvelle_adresse: e.target.value}}})}
+                  />
+                )}
+                {/* Représentation locataire */}
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 accent-blue-600"
+                    checked={formData.metadata.locataire_represente}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire_represente: e.target.checked}})}
+                  />
+                  <span className="text-sm text-slate-600">Locataire représenté ?</span>
+                </label>
+                {formData.metadata.locataire_represente && (
+                  <div className="space-y-2 pl-2 border-l-2 border-blue-200">
+                    <input
+                      type="text" placeholder="Nom du mandataire"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-sm"
+                      value={formData.metadata.mandataire_locataire.nom}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, mandataire_locataire: {...formData.metadata.mandataire_locataire, nom: e.target.value}}})}
+                    />
+                    <input
+                      type="email" placeholder="Email du mandataire"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-sm"
+                      value={formData.metadata.mandataire_locataire.email}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, mandataire_locataire: {...formData.metadata.mandataire_locataire, email: e.target.value}}})}
+                    />
+                    <select
+                      className="w-full p-2.5 rounded-xl border border-slate-300 text-sm bg-white"
+                      value={formData.metadata.mandataire_locataire.qualite}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, mandataire_locataire: {...formData.metadata.mandataire_locataire, qualite: e.target.value}}})}
+                    >
+                      <option value="">Qualité du mandataire...</option>
+                      <option>Agence immobilière</option>
+                      <option>Gestionnaire / administrateur</option>
+                      <option>Proche / tiers mandaté</option>
+                      <option>Commissaire de justice</option>
+                      <option>Autre</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -792,9 +901,12 @@ export default function EdlForm() {
                     onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, chauffage: e.target.value}})}
                   >
                     <option value="">Chauffage...</option>
-                    <option>Individuel Élec</option>
-                    <option>Individuel Gaz</option>
+                    <option>Électrique</option>
+                    <option>Gaz</option>
                     <option>Collectif</option>
+                    <option>Pompe à chaleur</option>
+                    <option>Bois</option>
+                    <option>Autre</option>
                   </select>
                 </div>
               </div>
@@ -949,6 +1061,61 @@ export default function EdlForm() {
               {/* Preview Eau */}
               {formData.compteurs[1].photo_url && (
                 <img src={formData.compteurs[1].photo_url} className="mt-3 w-full h-32 object-cover rounded-xl border border-slate-100 animate-in zoom-in-95" alt="Preview Eau" />
+              )}
+            </div>
+
+            {/* --- COMPTEUR GAZ (optionnel) --- */}
+            <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-4">
+                  <div className="bg-orange-50 p-2 rounded-full">
+                    <Flame size={20} className="text-orange-400" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-900">Gaz</p>
+                </div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Optionnel</span>
+              </div>
+
+              <div className="flex gap-2 min-w-0">
+                <input
+                  type="number" placeholder="Index m³"
+                  className="flex-1 min-w-0 p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  value={formData.compteurs[2].index}
+                  onChange={(e) => {
+                    const newCompteurs = [...formData.compteurs];
+                    newCompteurs[2].index = e.target.value;
+                    setFormData({...formData, compteurs: newCompteurs});
+                  }}
+                />
+                <PhotoSelector
+                  hasPhoto={!!formData.compteurs[2].photo_url || !!photoFiles['c2']}
+                  isUploading={uploadingKey === 'c2'}
+                  onPhotoSelected={async (file) => {
+                    if (user) {
+                      setUploadingKey('c2');
+                      const result = await uploadToSupabase(file, "compteurs");
+                      if (result) {
+                        const newCompteurs = [...formData.compteurs];
+                        newCompteurs[2] = { ...newCompteurs[2], photo_url: result.url, photo_hash: result.hash };
+                        setFormData({...formData, compteurs: newCompteurs});
+                      }
+                      setUploadingKey(null);
+                    } else {
+                      setPhotoFiles(prev => ({ ...prev, c2: file }));
+                    }
+                  }}
+                  onPhotoDeleted={() => {
+                    if (user && formData.compteurs[2].photo_url) deletePhotoFromBucket(formData.compteurs[2].photo_url);
+                    const newCompteurs = [...formData.compteurs];
+                    newCompteurs[2] = { ...newCompteurs[2], photo_url: '', photo_hash: '' };
+                    setFormData({...formData, compteurs: newCompteurs});
+                    setPhotoFiles(prev => { const n = { ...prev }; delete n['c2']; return n; });
+                  }}
+                />
+              </div>
+
+              {formData.compteurs[2].photo_url && (
+                <img src={formData.compteurs[2].photo_url} className="mt-3 w-full h-32 object-cover rounded-xl border border-slate-100 animate-in zoom-in-95" alt="Preview Gaz" />
               )}
             </div>
 
@@ -1174,7 +1341,7 @@ export default function EdlForm() {
               <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
                 <div className="flex flex-col min-[480px]:flex-row gap-2 flex-wrap">
                   <select id="select-room" className="flex-1 min-w-0 p-3 rounded-lg border border-slate-300 bg-white text-sm">
-                    {["Cuisine", "Salon", "Chambre 1", "Chambre 2", "SDB", "Entrée", "Balcon"]
+                    {["Cuisine", "Salon", "Chambre 1", "Chambre 2", "Chambre 3", "Chambre 4", "SDB", "Entrée", "WC", "Balcon", "Terrasse", "Parking/Garage", "Cave", "Buanderie"]
                       .filter(name => !formData.pieces.some((p: any) => p.nom === name))
                       .map(name => <option key={name}>{name}</option>)
                     }

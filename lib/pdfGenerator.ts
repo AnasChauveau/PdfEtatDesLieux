@@ -220,6 +220,7 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
 
   const bien = [
     `Adresse : ${data.metadata.adresse_bien}`,
+    `Type de location : ${data.metadata.meuble ? 'Meublé' : 'Non meublé'}`,
     data.metadata.lieu_signature ? `Lieu de signature : ${data.metadata.lieu_signature}` : null,
     `Chauffage : ${data.metadata.chauffage}`,
     data.metadata.cadastre ? `Cadastre : ${data.metadata.cadastre}` : null,
@@ -230,10 +231,18 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
 
   const parties = [
     `Bailleur : ${data.metadata.bailleur.nom}`,
+    data.metadata.bailleur.adresse ? `Adresse bailleur : ${data.metadata.bailleur.adresse}` : null,
+    data.metadata.bailleur_represente && data.metadata.mandataire_bailleur?.nom
+      ? `Mandataire bailleur : ${data.metadata.mandataire_bailleur.nom}${data.metadata.mandataire_bailleur.qualite ? ` (${data.metadata.mandataire_bailleur.qualite})` : ''}`
+      : null,
     `Email bailleur : ${data.metadata.bailleur.email}`,
     `Locataire : ${data.metadata.locataire.nom}`,
+    data.metadata.locataire_represente && data.metadata.mandataire_locataire?.nom
+      ? `Mandataire locataire : ${data.metadata.mandataire_locataire.nom}${data.metadata.mandataire_locataire.qualite ? ` (${data.metadata.mandataire_locataire.qualite})` : ''}`
+      : null,
     `Email locataire : ${data.metadata.locataire.email}`,
-  ].join('\n');
+    data.metadata.locataire?.nouvelle_adresse ? `Nouvelle adresse : ${data.metadata.locataire.nouvelle_adresse}` : null,
+  ].filter(Boolean).join('\n');
 
   cursorY = drawTable({
     page, font, boldFont,
@@ -256,7 +265,7 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
   });
   cursorY += 18;
 
-  const compteurRows = data.compteurs.map((c: any) => [
+  const compteurRows = data.compteurs.filter((c: any) => c.index).map((c: any) => [
     c.type,
     c.index,
     c.photo_url ? 'Photographié (preuve archivée)' : 'Vu sur place',

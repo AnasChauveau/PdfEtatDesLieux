@@ -92,7 +92,7 @@ export function getPieceKind(nom: string): PieceKind {
   if (n === 'entree' || n === 'hall') return 'entree';
   if (n === 'balcon' || n === 'terrasse') return 'balcon';
   if (n === 'cave') return 'cave';
-  if (n === 'parking' || n === 'garage') return 'parking';
+  if (n === 'parking' || n === 'garage' || n.startsWith('parking')) return 'parking';
   if (n === 'buanderie') return 'buanderie';
   return 'autre';
 }
