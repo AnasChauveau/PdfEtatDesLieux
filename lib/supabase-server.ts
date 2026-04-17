@@ -1,6 +1,6 @@
-// lib/supabase-server.ts — client serveur avec gestion des cookies de session
+// lib/supabase-server.ts - client serveur avec gestion des cookies de session
 // À utiliser uniquement dans Server Components, Route Handlers et middleware.
-// NE PAS importer dans des Client Components ('use client') — risque "window is not defined".
+// NE PAS importer dans des Client Components ('use client') - risque "window is not defined".
 
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';

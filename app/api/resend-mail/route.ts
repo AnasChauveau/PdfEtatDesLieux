@@ -1,7 +1,7 @@
 // Next.js API Route: POST /api/resend-mail
 // Triggered by the "Je n'ai pas reçu le mail" button.
 // Re-sends the email(s) with optional email address correction.
-// Uses SUPABASE_SERVICE_ROLE_KEY — server-side only.
+// Uses SUPABASE_SERVICE_ROLE_KEY - server-side only.
 
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
@@ -54,10 +54,10 @@ function buildResendHtml(params: {
   if (params.isPurged) {
     return `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-        <h2>État des lieux — ${params.adresse}</h2>
+        <h2>État des lieux - ${params.adresse}</h2>
         <p>${roleIntro} le PDF de l'état des lieux <strong>${params.typeEdl.toLowerCase()}</strong>
         du bien situé au <strong>${params.adresse}</strong>.</p>
-        <p>📄 <strong>PDF joint</strong> — document légal de référence.</p>
+        <p>📄 <strong>PDF joint</strong> - document légal de référence.</p>
         <p style="color:#888;font-size:12px;">
           Les photos originales ont été supprimées conformément à notre politique Zéro Déchet.
           Le PDF reste votre document légal de référence.
@@ -76,10 +76,10 @@ function buildResendHtml(params: {
 
   return `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2>État des lieux — ${params.adresse}</h2>
+      <h2>État des lieux - ${params.adresse}</h2>
       <p>${roleIntro} le PDF de l'état des lieux <strong>${params.typeEdl.toLowerCase()}</strong>
       du bien situé au <strong>${params.adresse}</strong>.</p>
-      <p>📄 <strong>PDF joint</strong> — document légal de référence.</p>
+      <p>📄 <strong>PDF joint</strong> - document légal de référence.</p>
       ${zipSection}
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
       <p style="color:#888;font-size:12px;">
@@ -89,7 +89,7 @@ function buildResendHtml(params: {
 }
 
 export async function POST(req: NextRequest) {
-  // Initialize inside handler — avoids build-time env var errors
+  // Initialize inside handler - avoids build-time env var errors
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
   const typeEdl = rapport.type_edl as string;
   const bailleurEmail = newBailleurEmail ?? (rapport.bailleur_email as string);
   const locataireEmail = newLocataireEmail ?? (rapport.client_email as string);
-  const subject = `[Renvoi] État des lieux ${typeEdl.toLowerCase()} — ${adresse}`;
+  const subject = `[Renvoi] État des lieux ${typeEdl.toLowerCase()} - ${adresse}`;
   const pdfFilename = `etat-des-lieux-${adresse.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.pdf`;
 
   // Download PDF

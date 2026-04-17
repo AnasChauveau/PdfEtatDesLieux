@@ -37,7 +37,7 @@ export default function Header({ edlInProgress = false }: HeaderProps) {
   return (
     <header className="w-full bg-slate-900 text-white px-4 py-2.5">
       <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
-        {/* Marque — lien vers l'accueil */}
+        {/* Marque - lien vers l'accueil */}
         <a href="/" className="text-sm font-bold tracking-tight hover:text-slate-300 transition">
           Express EDL
         </a>

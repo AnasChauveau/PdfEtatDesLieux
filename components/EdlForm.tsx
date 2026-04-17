@@ -43,10 +43,10 @@ function makeElement(t: ElementTemplate): PieceElement {
   };
 }
 
-// À câbler lors de l'implémentation "reprendre un brouillon draft" (roadmap étape 6 — Auth).
+// À câbler lors de l'implémentation "reprendre un brouillon draft" (roadmap étape 6 - Auth).
 // Convertit un élément ancien { nom, etat (label FR), observations } en PieceElement typé.
 // Note : les anciens etat ("Bon état", "Très bon état") resteront en string brut dans
-// etat — une table de mapping inverse sera nécessaire au moment du câblage.
+// etat - une table de mapping inverse sera nécessaire au moment du câblage.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function normalizeElement(el: any): PieceElement {
   return {
@@ -62,7 +62,7 @@ function normalizeElement(el: any): PieceElement {
   };
 }
 
-// Composant sélecteur d'équipement optionnel — une instance par pièce
+// Composant sélecteur d'équipement optionnel - une instance par pièce
 function AddEquipmentRow({ onAdd }: { onAdd: (kind: ElementKind, label: string) => void }) {
   const [kind, setKind] = useState<ElementKind>('volet');
   const [customLabel, setCustomLabel] = useState('');
@@ -214,7 +214,7 @@ function extractStoragePath(url: string): string | null {
   }
 }
 
-// Supprime une photo du bucket — fire & forget, ne bloque pas l'UX
+// Supprime une photo du bucket - fire & forget, ne bloque pas l'UX
 function deletePhotoFromBucket(url: string): void {
   const path = extractStoragePath(url);
   if (path) {
@@ -308,7 +308,7 @@ export default function EdlForm() {
 
     const sigBailleur = useRef<any>(null);
     const sigLocataire = useRef<any>(null);
-    // Largeur mesurée du conteneur signature — synchronise la résolution du canvas avec le rendu réel
+    // Largeur mesurée du conteneur signature - synchronise la résolution du canvas avec le rendu réel
     const sigContainerRef = useRef<HTMLDivElement>(null);
     const [canvasWidth, setCanvasWidth] = useState(340);
 
@@ -419,7 +419,7 @@ export default function EdlForm() {
         maxSizeMB: 0.8,
         maxWidthOrHeight: 1600,
         useWebWorker: true,
-        fileType: 'image/jpeg',   // force JPEG en sortie — WebP/HEIC/PNG normalisés
+        fileType: 'image/jpeg',   // force JPEG en sortie - WebP/HEIC/PNG normalisés
         initialQuality: 0.82,
       };
 
@@ -433,7 +433,7 @@ export default function EdlForm() {
           .map(b => b.toString(16).padStart(2, '0'))
           .join('');
 
-        const fileName = `${Math.random()}.jpg`;   // toujours .jpg — cohérent avec fileType
+        const fileName = `${Math.random()}.jpg`;   // toujours .jpg - cohérent avec fileType
         const filePath = `${folder}/${fileName}`;
 
         const { error } = await supabase.storage
@@ -453,7 +453,7 @@ export default function EdlForm() {
       }
     };
 
-    // 2. SAUVEGARDE DU RAPPORT — machine à états : draft → pdf_generated → email_sent
+    // 2. SAUVEGARDE DU RAPPORT - machine à états : draft → pdf_generated → email_sent
     const saveRapport = async (data: any) => {
       // 0. Upload des photos en attente (Mode B : files stockés en mémoire React, pas encore sur Storage)
       //    À ce stade l'utilisateur EST authentifié (la modale l'a forcé avant d'arriver ici).
@@ -468,7 +468,7 @@ export default function EdlForm() {
                          : key.startsWith('p') ? 'pieces'
                          : 'degats';
             const result = await uploadToSupabase(file, folder);
-            if (!result) return; // échec silencieux — zip-and-send logge ERREURS.txt
+            if (!result) return; // échec silencieux - zip-and-send logge ERREURS.txt
             // Patcher la bonne entrée dans data
             if (key === 'c0') {
               data.compteurs[0] = { ...data.compteurs[0], photo_url: result.url, photo_hash: result.hash };
@@ -516,7 +516,7 @@ export default function EdlForm() {
         const id = insertData.id as string;
         setRapportId(id);
 
-        // 2. GÉNÉRER LE PDF — première passe, avec rapport_id injecté dans les métadonnées
+        // 2. GÉNÉRER LE PDF - première passe, avec rapport_id injecté dans les métadonnées
         console.log("Génération du PDF en cours...");
         const finalData = {
           ...updatedData,
@@ -531,7 +531,7 @@ export default function EdlForm() {
           .map(b => b.toString(16).padStart(2, '0'))
           .join('');
         const finalPdfBytes = await injectHashIntoPDF(pdfBytes, pdfHash);
-        console.log(`PDF SHA-256 : ${pdfHash} — taille finale : ${finalPdfBytes.length} octets`);
+        console.log(`PDF SHA-256 : ${pdfHash} - taille finale : ${finalPdfBytes.length} octets`);
 
         // 3. UPLOADER LE PDF (avec hash injecté)
         const fileName = `rapport_${id}.pdf`;
@@ -740,7 +740,7 @@ export default function EdlForm() {
 
             <div className="grid grid-cols-1 gap-3 md:gap-4">
 
-              {/* Logement meublé — radio Oui / Non */}
+              {/* Logement meublé - radio Oui / Non */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold uppercase text-slate-400">Logement meublé</label>
                 <div className="flex gap-5">
@@ -1210,7 +1210,7 @@ export default function EdlForm() {
                 {formData.pieces.map((piece: any, pIndex: number) => (
                   <div key={pIndex} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     
-                    {/* Header pièce — nom + icônes compactes */}
+                    {/* Header pièce - nom + icônes compactes */}
                     <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
                       <span className="font-bold text-slate-800 uppercase text-sm tracking-wide">{piece.nom}</span>
                       <div className="flex items-center gap-2">
@@ -1240,7 +1240,7 @@ export default function EdlForm() {
                             setPhotoFiles(prev => { const n = { ...prev }; delete n[`p${pIndex}`]; return n; });
                           }}
                         />
-                        {/* Bouton supprimer — icône seule */}
+                        {/* Bouton supprimer - icône seule */}
                         <button
                           onClick={() => {
                             const newPieces = formData.pieces.filter((_, i) => i !== pIndex);
@@ -1327,7 +1327,7 @@ export default function EdlForm() {
 
                           </div>
 
-                          {/* État + observations — empilés sur très petit écran */}
+                          {/* État + observations - empilés sur très petit écran */}
                           <div className="flex flex-col min-[550px]:flex-row gap-1.5">
                             <select
                               className={`w-full min-[350px]:w-[45%] shrink-0 p-2 rounded-lg border text-xs ${
@@ -1440,7 +1440,7 @@ export default function EdlForm() {
                 </button>
                 <button
                   onClick={() => {
-                    // Mode B — non connecté : sauvegarder le draft et afficher la modale auth
+                    // Mode B - non connecté : sauvegarder le draft et afficher la modale auth
                     if (!user && !userLoading) {
                       const draftToSave = {
                         ...formData,
@@ -1450,7 +1450,7 @@ export default function EdlForm() {
                       setShowAuthModal(true);
                       return;
                     }
-                    // Mode A — connecté : vérification Alur puis passage aux signatures
+                    // Mode A - connecté : vérification Alur puis passage aux signatures
                     if (formData.pieces.length > 0 && !isAlurCompliant()) {
                       setShowAlurModal(true);
                     } else {
@@ -1539,11 +1539,11 @@ export default function EdlForm() {
                       <h2 className="text-xl font-bold text-slate-900">Génération du dossier en cours…</h2>
                       <p className="text-slate-500 text-sm mt-2">Compression des photos, création du ZIP et envoi des emails.<br />Cela peut prendre 30 à 60 secondes.</p>
                     </div>
-                    <p className="text-xs text-slate-400">Vous pouvez fermer cet onglet — vous recevrez votre email dans quelques instants.</p>
+                    <p className="text-xs text-slate-400">Vous pouvez fermer cet onglet - vous recevrez votre email dans quelques instants.</p>
                   </div>
                 )}
 
-                {/* État : succès — email envoyé */}
+                {/* État : succès - email envoyé */}
                 {sendState === 'success' && (
                   <div className="py-8 space-y-6">
                     <div className="text-center">
@@ -1554,8 +1554,8 @@ export default function EdlForm() {
 
                     <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-700 space-y-1">
                       <p className="font-semibold">Le PDF et les photos ont été envoyés à :</p>
-                      <p>— {formData.metadata.bailleur.email}</p>
-                      <p>— {formData.metadata.locataire.email}</p>
+                      <p>- {formData.metadata.bailleur.email}</p>
+                      <p>- {formData.metadata.locataire.email}</p>
                     </div>
 
                     <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-sm text-blue-800">
@@ -1580,7 +1580,7 @@ export default function EdlForm() {
                   </div>
                 )}
 
-                {/* État : ZIP ok mais email échoué — proposer retry */}
+                {/* État : ZIP ok mais email échoué - proposer retry */}
                 {sendState === 'emailFailed' && (
                   <div className="py-8 space-y-6">
                     <div className="text-center">
@@ -1721,7 +1721,7 @@ export default function EdlForm() {
               <button
                 type="button"
                 onClick={() => {
-                  // Garder la photo — on met juste à jour l'état
+                  // Garder la photo - on met juste à jour l'état
                   const newPieces = [...formData.pieces];
                   newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex] = {
                     ...newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex],
@@ -1739,7 +1739,7 @@ export default function EdlForm() {
                 type="button"
                 onClick={() => {
                   const el = formData.pieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex];
-                  // Purge bucket — fire & forget, ne bloque pas l'UX
+                  // Purge bucket - fire & forget, ne bloque pas l'UX
                   if (el.photo_url) deletePhotoFromBucket(el.photo_url);
                   const newPieces = [...formData.pieces];
                   newPieces[photoRevertModal.pIndex].elements[photoRevertModal.eIndex] = {
@@ -1780,7 +1780,7 @@ export default function EdlForm() {
                 {missing.map((m, i) => (
                   <li key={i} className="text-xs text-slate-700 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-                    <span className="font-medium">{m.pieceName}</span> — {m.elementLabel}
+                    <span className="font-medium">{m.pieceName}</span> - {m.elementLabel}
                   </li>
                 ))}
               </ul>
@@ -1813,7 +1813,7 @@ export default function EdlForm() {
         <div className="mx-4 mb-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs text-amber-800">
           <Camera size={14} className="shrink-0 mt-0.5" />
           <span>
-            <strong>📷 Photos à re-sélectionner</strong> — vos fichiers photos n'ont pas pu être conservés lors de la connexion. Veuillez les re-sélectionner sur les éléments concernés.
+            <strong>📷 Photos à re-sélectionner</strong> - vos fichiers photos n'ont pas pu être conservés lors de la connexion. Veuillez les re-sélectionner sur les éléments concernés.
           </span>
           <button
             type="button"
@@ -1839,7 +1839,7 @@ export default function EdlForm() {
                   Dernière étape avant la signature
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Créez votre compte en 10 secondes — sans mot de passe
+                  Créez votre compte en 10 secondes - sans mot de passe
                 </p>
               </div>
             </div>

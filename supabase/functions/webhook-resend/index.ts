@@ -133,7 +133,7 @@ Deno.serve(async (req: Request) => {
 
     // Transition rapport status
     if (eventType === 'delivered') {
-      // Only advance from email_sent — never regress a further status
+      // Only advance from email_sent - never regress a further status
       await supabase
         .from('rapports')
         .update({ status: 'email_delivered' })
@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
         .in('status', ['email_sent', 'zip_created']);
     }
   } else if (resendEmailId && eventType) {
-    // Unknown email_id — log without rapport_id for audit
+    // Unknown email_id - log without rapport_id for audit
     console.warn(`No email_event found for resend_email_id=${resendEmailId}`);
   }
 

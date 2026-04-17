@@ -1,6 +1,6 @@
-// middleware.ts — refresh de session Supabase sur toutes les routes.
+// middleware.ts - refresh de session Supabase sur toutes les routes.
 // Protège uniquement /dashboard et /account (routes futures).
-// NE redirige PAS / vers /login — le formulaire est accessible sans auth.
+// NE redirige PAS / vers /login - le formulaire est accessible sans auth.
 
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';

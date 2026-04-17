@@ -84,7 +84,7 @@ function drawTable(cfg: TableConfig): number {
   });
   cursorY += HEADER_H;
 
-  // Data rows — height driven by the tallest cell
+  // Data rows - height driven by the tallest cell
   rows.forEach((row, rowIdx) => {
     const cellLines = row.map((cell, i) => wrapCell(cell, colWidths[i]));
     const maxLines = Math.max(1, ...cellLines.map(l => l.length));
@@ -156,7 +156,7 @@ function buildPhotoList(data: any): PhotoEntry[] {
     for (const el of (piece.elements ?? [])) {
       if (el.photo_url && !seen.has(el.photo_url)) {
         seen.add(el.photo_url);
-        list.push({ index: ++i, label: `${piece.nom} — ${el.label ?? el.nom}`, url: el.photo_url, hash: el.photo_hash ?? null });
+        list.push({ index: ++i, label: `${piece.nom} - ${el.label ?? el.nom}`, url: el.photo_url, hash: el.photo_hash ?? null });
       }
     }
   }
@@ -284,7 +284,7 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
 
   // ── PIÈCES ─────────────────────────────────────────────────────────────────
   for (const piece of data.pieces) {
-    // Page break if needed — estimate height to avoid mid-table overflow
+    // Page break if needed - estimate height to avoid mid-table overflow
     const estimatedPieceH = 18 + (piece.elements?.length ?? 3) * 18 + 30;
     if (cursorY + estimatedPieceH > PAGE_H - 60) {
       page = await addPage(doc);
@@ -306,7 +306,7 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
 
     const elementRows = piece.elements.map((el: any) => [
       el.label ?? el.nom,
-      ETAT_LABELS[el.etat] ?? el.etat ?? '—',
+      ETAT_LABELS[el.etat] ?? el.etat ?? '-',
       el.photo_url
         ? `${el.observations || 'R.A.S'} (Détail photographié)`
         : el.observations || 'R.A.S',
@@ -453,7 +453,7 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
         page = await addPage(doc);
         cursorY = 50;
       }
-      const numStr = `Photo #${String(photo.index).padStart(3, '0')} — ${photo.label}`;
+      const numStr = `Photo #${String(photo.index).padStart(3, '0')} - ${photo.label}`;
       page.drawText(numStr, {
         x: MARGIN,
         y: fromTop(cursorY + 9),
@@ -534,7 +534,7 @@ export const generateEDL_PDF = async (data: any): Promise<Blob> => {
   return new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
 };
 
-// ── STUB — Hash injection (étape #4 roadmap) ────────────────────────────────
+// ── STUB - Hash injection (étape #4 roadmap) ────────────────────────────────
 // Charge le PDF généré, injecte le hash SHA-256 en pied de dernière page,
 // retourne les bytes modifiés. Non branché jusqu'à l'étape #4.
 export const injectHashIntoPDF = async (

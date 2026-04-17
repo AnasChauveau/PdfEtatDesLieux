@@ -68,7 +68,7 @@ export default function LoginPage({
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Express EDL</h1>
           <p className="text-sm text-slate-500 mt-1">
             {isRestoring
-              ? 'Votre formulaire vous attend — connectez-vous pour finaliser'
+              ? 'Votre formulaire vous attend - connectez-vous pour finaliser'
               : 'Connectez-vous pour accéder à vos états des lieux'}
           </p>
         </div>
@@ -143,7 +143,7 @@ export default function LoginPage({
               </button>
 
               <p className="text-center text-xs text-slate-400">
-                Pas de mot de passe — un lien magique par email.
+                Pas de mot de passe - un lien magique par email.
               </p>
             </form>
           )}

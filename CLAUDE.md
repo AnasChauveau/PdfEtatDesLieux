@@ -28,7 +28,7 @@
 |---|---|---|
 | `zip-and-send` | Frontend (après `pdf_generated`) | Zippe les photos, upload sur `edl-zips`, envoie les emails via Resend, transition → `email_sent` |
 | `webhook-resend` | Webhook Resend (Svix) | Reçoit les events de livraison (`delivered`, `bounced`, `complained`), log dans `email_events`, met à jour le statut rapport |
-| `cron-purge` | Cron Supabase — 03:00 UTC quotidien | Applique les 5 règles TTL (draft/24h, payment_pending/1h, email_delivered/48h, zip_created+email_failed/72h, email_sent/7j) |
+| `cron-purge` | Cron Supabase - 03:00 UTC quotidien | Applique les 5 règles TTL (draft/24h, payment_pending/1h, email_delivered/48h, zip_created+email_failed/72h, email_sent/7j) |
 
 **Déploiement individuel :**
 ```bash
@@ -43,11 +43,11 @@ npx supabase functions deploy
 ```
 
 **Secrets requis** (à définir via `npx supabase secrets set KEY=value`) :
-- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — injectés automatiquement par Supabase
-- `RESEND_API_KEY` — clé API Resend
-- `RESEND_FROM_EMAIL` — adresse expéditrice vérifiée dans Resend
-- `RESEND_WEBHOOK_SECRET` — secret Svix copié depuis le dashboard Resend
-- `CRON_SECRET` — secret custom pour protéger `cron-purge` (`openssl rand -hex 32`)
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` - injectés automatiquement par Supabase
+- `RESEND_API_KEY` - clé API Resend
+- `RESEND_FROM_EMAIL` - adresse expéditrice vérifiée dans Resend
+- `RESEND_WEBHOOK_SECRET` - secret Svix copié depuis le dashboard Resend
+- `CRON_SECRET` - secret custom pour protéger `cron-purge` (`openssl rand -hex 32`)
 
 ## Stratégie "Zéro Déchet"
 - Les photos ne sont PAS incluses dans le PDF pour optimiser le poids (cible < 300 ko).
@@ -56,7 +56,7 @@ npx supabase functions deploy
 
 
 
-# Projet : Application d'État des Lieux (EDL) — Contexte Loi 2026
+# Projet : Application d'État des Lieux (EDL) - Contexte Loi 2026
 
 ## 🎯 Vision produit
 
@@ -80,7 +80,7 @@ avec un workflow fluide de ~15 minutes. Avantage concurrentiel = vitesse de gén
   Resend (emailing transactionnel) + TypeScript + Tailwind CSS
 - **Formulaire multi-étapes** fonctionnel : `components/EdlForm.tsx` (5 étapes :
   bien, parties, compteurs, pièces, signature)
-- **Génération PDF** : `lib/pdfGenerator.ts` — pdf-lib ✅
+- **Génération PDF** : `lib/pdfGenerator.ts` - pdf-lib ✅
 - **Icons:** Lucide React (actuellement, mais modifier si besoins)
 - **Signatures** : capturées via Canvas HTML5, insérées en 60x30 dans le PDF
 - **RLS Supabase** : configurée pour upload/delete en mode anon (à auditer avant prod)
@@ -89,7 +89,7 @@ avec un workflow fluide de ~15 minutes. Avantage concurrentiel = vitesse de gén
 
 ## ⚠️ Contraintes inviolables
 
-1. **PDF final < 700 Ko** — compression images obligatoire avant intégration.
+1. **PDF final < 700 Ko** - compression images obligatoire avant intégration.
 2. **Ne jamais modifier la structure de la table `rapports`** sans demander
    confirmation explicite à l'utilisateur.
 3. **La purge des photos sources se déclenche immédiatement** dès que le ZIP est
@@ -151,7 +151,7 @@ draft
   → purged            ← cron quotidien, 48h après email_delivered (ZIP supprimé)
 ```
 
-**Règles de purge** (pilotées par le cron quotidien — voir §8) :
+**Règles de purge** (pilotées par le cron quotidien - voir §8) :
 - `draft` depuis > 24 h → purge totale (ligne DB + photos sources)
 - `payment_pending` depuis > 1 h → purge totale (paiement abandonné ou échoué)
 - `email_delivered` depuis > 48 h → suppression du ZIP uploadé uniquement ; PDF et `archive_json` conservés 9 ans
@@ -178,7 +178,7 @@ Flux Stripe :
 4. Génération PDF déclenchée → `status='pdf_generated'`
 
 Un rapport resté en `payment_pending` depuis plus de 1 h peut être considéré abandonné
-(paiement échoué ou annulé) — le cron quotidien (voir roadmap) le purgera avec les
+(paiement échoué ou annulé) - le cron quotidien (voir roadmap) le purgera avec les
 drafts expirés.
 
 ### 7. Livraison email : PDF en pièce jointe, ZIP via lien signé
@@ -291,9 +291,9 @@ export const pieceTemplates: Record<PieceKind, ElementTemplate[]> = {
 **Priorité d'ajout des pièces** : WC en premier (le plus oublié, source #1 de
 litiges), puis parking, puis cave, puis balcon.
 
-### 8. Purge automatique — cron quotidien Supabase (5 TTL) ✅ FAIT
+### 8. Purge automatique - cron quotidien Supabase (5 TTL) ✅ FAIT
 
-Edge Function `supabase/functions/cron-purge/index.ts` — déclenchée quotidiennement à 03:00 UTC.
+Edge Function `supabase/functions/cron-purge/index.ts` - déclenchée quotidiennement à 03:00 UTC.
 Protégée par `CRON_SECRET` en header `x-cron-secret`.
 
 **Détection du "depuis > Xh"** : la table `rapports` n'a pas de `status_changed_at`.
@@ -326,7 +326,7 @@ Cette double empreinte (PDF + photos individuelles) constitue le **différenciat
 
 Auth demandée à la transition **étape 4 → 5** (juste avant signature), pas à l'entrée du site. L'utilisateur peut découvrir et remplir tout le formulaire sans compte. La connexion devient nécessaire au moment de finaliser l'EDL pour permettre la sauvegarde DB, l'envoi mail et l'archivage 9 ans.
 
-- Pas d'INSERT DB ni d'upload Storage avant authentification — données conservées côté client (localStorage + mémoire React)
+- Pas d'INSERT DB ni d'upload Storage avant authentification - données conservées côté client (localStorage + mémoire React)
 - Modale inline avec input email + `signInWithOtp` directement (pas de redirect vers /login)
 - Draft sauvegardé en localStorage (`edl_draft_pending_auth`) avant le Magic Link, restauré au retour via `?restoreDraft=true`
 - Photos irrécupérables après connexion (File objects non sérialisables) → indicateurs visuels "📷 À re-sélectionner"
@@ -340,13 +340,13 @@ Auth demandée à la transition **étape 4 → 5** (juste avant signature), pas 
 
 La philosophie "Zéro Déchet" implique que les photos originales sont définitivement supprimées 48h après livraison email. Ce choix doit être **explicitement et fermement communiqué** à l'utilisateur à plusieurs endroits du parcours pour éviter qu'il se retrouve sans photos en cas de litige tardif :
 
-- **Dans le mail envoyé** (corps du message) : message d'avertissement clair — "Téléchargez et conservez précieusement ce ZIP, c'est la seule version originale qui sera conservée. Passé 48h les photos seront définitivement supprimées de nos serveurs."
+- **Dans le mail envoyé** (corps du message) : message d'avertissement clair - "Téléchargez et conservez précieusement ce ZIP, c'est la seule version originale qui sera conservée. Passé 48h les photos seront définitivement supprimées de nos serveurs."
 - **Sur l'écran de succès dans l'app** : renforcer le message actuel pour insister sur l'urgence du téléchargement.
 - **Dans le PDF** (fin de l'annexe photographique) : ajouter "à conserver impérativement par les deux parties" à la mention de renvoi au ZIP.
 
 Cette pédagogie est aussi un argument commercial : on responsabilise l'utilisateur sur ses propres archives, ce qui justifie notre modèle "sans engagement de stockage".
 
-## 📜 Conformité Loi Alur — éléments obligatoires
+## 📜 Conformité Loi Alur - éléments obligatoires
 
 Chaque pièce doit inclure **par défaut et de manière non supprimable** (socle Alur) :
 - Sols / plinthes
@@ -377,7 +377,7 @@ Le PDF actuel manque les éléments suivants. **À ajouter avant tout lancement*
    de non-altération). Workflow : générer le PDF, calculer son hash, réinjecter
    le hash dans le PDF, sauvegarder.
 7. **Annexe photographique** en fin de PDF :
-   - liste numérotée `Photo #001 — Cuisine — Menuiseries`
+   - liste numérotée `Photo #001 - Cuisine - Menuiseries`
    - hash SHA-256 de chaque photo
    - renvoi explicite au ZIP : "Photos consultables dans le dossier ZIP joint"
 
@@ -410,20 +410,20 @@ Cron Supabase quotidien qui purge tout ce qui dépasse (RGPD-propre by design).
 1. **Double livraison email** : le PDF (PJ) + lien ZIP signé partent simultanément
    au bailleur ET au locataire. Deux copies dans la nature = preuve contradictoire.
 
-2. **Écran de succès final — automatisé, sans bouton "Purger"** :
+2. **Écran de succès final - automatisé, sans bouton "Purger"** :
    La purge est désormais entièrement pilotée par le cron (TTL). L'utilisateur ne
    porte plus cette responsabilité technique. L'écran final affiche simplement :
 
    > ✅ Votre EDL a été envoyé
    >
    > Le PDF et les photos ont été envoyés à :
-   > — [email_bailleur]
-   > — [email_locataire]
+   > - [email_bailleur]
+   > - [email_locataire]
    >
    > Vos photos seront automatiquement supprimées dans 48h, conformément à notre
    > politique Zéro Déchet. Le PDF reste votre document légal de référence.
    >
-   > [🔄 Je n'ai pas reçu le mail — renvoyer]   [➕ Créer un nouveau rapport]
+   > [🔄 Je n'ai pas reçu le mail - renvoyer]   [➕ Créer un nouveau rapport]
 
    Le bouton "Je n'ai pas reçu le mail" ouvre une modale permettant de corriger
    une éventuelle faute de frappe dans les adresses, puis redéclenche l'envoi
@@ -440,29 +440,29 @@ Cron Supabase quotidien qui purge tout ce qui dépasse (RGPD-propre by design).
 
 Ordre d'implémentation recommandé :
 
-1. ~~**Machine à états `status`**~~ ✅ FAIT — machine à états + écran de confirmation manuelle
-2. ~~**Migration `jsPDF` → `pdf-lib`**~~ ✅ FAIT — contrôle fin de la mise en page, images, word wrap
-3. ~~**ZIP + Resend + écran de succès**~~ ✅ FAIT — PDF en PJ, ZIP via lien signé Supabase J+2 ; écran final "EDL envoyé"
-4. ~~**Refonte PDF**~~ ✅ FAIT — mentions légales + hash SHA-256 + annexe photos numérotées
-5. ~~**Structure `elements[]` + templates de pièces**~~ ✅ FAIT — AVANT d'ajouter WC/parking
-5.ter. ~~**Cron de purge automatique — 5 TTL**~~ ✅ FAIT — règles draft/24h, payment_pending/1h,
+1. ~~**Machine à états `status`**~~ ✅ FAIT - machine à états + écran de confirmation manuelle
+2. ~~**Migration `jsPDF` → `pdf-lib`**~~ ✅ FAIT - contrôle fin de la mise en page, images, word wrap
+3. ~~**ZIP + Resend + écran de succès**~~ ✅ FAIT - PDF en PJ, ZIP via lien signé Supabase J+2 ; écran final "EDL envoyé"
+4. ~~**Refonte PDF**~~ ✅ FAIT - mentions légales + hash SHA-256 + annexe photos numérotées
+5. ~~**Structure `elements[]` + templates de pièces**~~ ✅ FAIT - AVANT d'ajouter WC/parking
+5.ter. ~~**Cron de purge automatique - 5 TTL**~~ ✅ FAIT - règles draft/24h, payment_pending/1h,
     email_delivered/48h, zip_created+email_failed/72h (stuck), email_sent/7j (webhook absent) ;
     détection via email_events pour les règles basées sur transition ; CRON_SECRET en header ;
     déployer : `npx supabase functions deploy cron-purge` ; voir §8
-6. ~~**AUTH**~~ ✅ FAIT — Magic Link + user_id sur rapports + migration RLS anon→authenticated ; upload photos Mode B à la soumission ; page /auth/done pour préserver les photos dans l'onglet original
+6. ~~**AUTH**~~ ✅ FAIT - Magic Link + user_id sur rapports + migration RLS anon→authenticated ; upload photos Mode B à la soumission ; page /auth/done pour préserver les photos dans l'onglet original
 7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté) ✅ FAIT
-8. **Mode brouillon localStorage** (0.5 j) — discret mais critique ✅ FAIT
+8. **Mode brouillon localStorage** (0.5 j) - discret mais critique ✅ FAIT
 9. **Ajout pièces WC, parking, cave, balcon** ✅ FAIT
 10. **Badge "Conforme Loi Alur"** ✅ FAIT
-11. **Intégration Stripe Checkout** (1 j) — statuts `payment_pending` et `paid` ; le webhook
+11. **Intégration Stripe Checkout** (1 j) - statuts `payment_pending` et `paid` ; le webhook
     `payment_intent.succeeded` devient le déclencheur de la génération PDF à la place de
     l'INSERT direct. À faire après la refonte PDF (#4) pour ne pas payer un PDF bancal.
     ⚠️ L'app utilisera Supabase Auth (Magic Link email). Pour l'instant on continue en mode
     anon. L'auth sera intégrée à l'étape Auth (#6) de la roadmap. Ne crée aucune dépendance
     à l'authentification dans cette étape.
-12. **Cron Supabase quotidien — archivage 9 ans** (2 h) — supprime les rapports dont
+12. **Cron Supabase quotidien - archivage 9 ans** (2 h) - supprime les rapports dont
     `archive_expires_at` est dépassé (PDF + archive_json). Distinct du cron de purge 5.ter.
-13. **Page landing + exemple PDF statique** — page publique de présentation avec un PDF
+13. **Page landing + exemple PDF statique** - page publique de présentation avec un PDF
     d'exemple téléchargeable (argument commercial, confiance utilisateur)
 
 Post-MVP : import EDL d'entrée externe, intégration DPE, mode meublé avancé,
@@ -470,7 +470,7 @@ eIDAS via Yousign, PWA offline complète.
 
 ## ✅ Checklist avant prod
 
-- [x] **Auditer et durcir toutes les policies RLS** — fait à l'étape 6 : policies anon supprimées, 4 policies `authenticated` scopées `auth.uid() = user_id` sur `rapports`, RLS activée sur `email_events`, Storage policies remplacées par `authenticated`
+- [x] **Auditer et durcir toutes les policies RLS** - fait à l'étape 6 : policies anon supprimées, 4 policies `authenticated` scopées `auth.uid() = user_id` sur `rapports`, RLS activée sur `email_events`, Storage policies remplacées par `authenticated`
 - [ ] **Supprimer les photos orphelines** lors du remplacement d'une photo par l'utilisateur : quand une nouvelle photo est uploadée à la place d'une existante, l'ancienne URL est écrasée dans le state mais le fichier reste dans le bucket `photos-etats-des-lieux`. À corriger avant prod.
 - [ ] **Rédiger CGU/CGV** incluant la clause sur le délai de téléchargement des photos (48h) et la valeur probante exclusive du PDF après purge. Clause type : "Le client reconnaît que les photos sont mises à disposition via un lien temporaire de 48h et qu'il lui incombe de les télécharger et archiver dans ce délai. Passé ce délai, seul le PDF fait foi comme document contradictoire."
 - [x] **Acheter un nom de domaine** et le brancher sur Vercel (Settings → Domains).
@@ -482,7 +482,7 @@ eIDAS via Yousign, PWA offline complète.
 - [ ] **SEO** : configurer `metadata` Next.js (title, description, OG), `sitemap.xml`, `robots.txt`. Prévoir 3–5 articles de blog ciblés "état des lieux Jeanbrun", "EDL dématérialisé 2026". Créer Google My Business.
 - [ ] **Dépôt INPI** : déposer la marque "Express EDL" (~190 €) avant toute communication publique.
 - [ ] **Licence du code** : décider du modèle (privative, MIT, AGPL…) avant tout commit public.
-- [ ] **Mentions légales + CGU/CGV** : à rédiger — clause conservation 48h photos déjà actée, clause valeur probante PDF à ajouter.
+- [ ] **Mentions légales + CGU/CGV** : à rédiger - clause conservation 48h photos déjà actée, clause valeur probante PDF à ajouter.
 - [ ] **Conformité RGPD** : établir le registre des traitements, rédiger la politique de confidentialité, désigner un DPO (auto-désignation possible à cette échelle).
 - [ ] **Tests utilisateurs** : conduire 5 entretiens bailleurs Leboncoin avant toute dépense publicitaire payante.
 - [ ] **Vérifier le cron-purge en prod** après 1 semaine : contrôler les logs Supabase Cron pour confirmer un passage quotidien réussi (`SELECT * FROM cron.job_run_details WHERE jobname = 'daily-purge' ORDER BY start_time DESC LIMIT 7;`).
@@ -496,7 +496,7 @@ eIDAS via Yousign, PWA offline complète.
 - **Tester la génération PDF** après toute modification de `pdfGenerator.ts`
   en vérifiant que le fichier de sortie reste < 700 Ko.
 - **Préférer les petits commits atomiques** plutôt que les gros refactors d'un
-  coup — Anas (nom du développeur de cette solution) veut pouvoir suivre et apprendre, pas juste valider.
+  coup - Anas (nom du développeur de cette solution) veut pouvoir suivre et apprendre, pas juste valider.
 - **Parler français** dans les réponses, les commentaires de code peuvent rester
   en anglais (convention standard).
 - Anas est à un moment émotionnellement sensible sur ce projet : encourager

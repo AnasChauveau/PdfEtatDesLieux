@@ -4,7 +4,7 @@
 // then sends emails to both bailleur and locataire via Resend.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
-// @ts-ignore — JSZip has no Deno types but works fine via npm:
+// @ts-ignore - JSZip has no Deno types but works fine via npm:
 import JSZip from 'npm:jszip@3';
 
 const CORS_HEADERS = {
@@ -46,8 +46,8 @@ function parseStorageUrl(url: string): { bucket: string; path: string } | null {
   return { bucket: match[1], path: match[2] };
 }
 
-// Photos are pre-compressed client-side (≤1600px, ≤800Ko, JPEG) — no server processing needed.
-// Returns { bytes } on success or { error } on failure — never swallows silently.
+// Photos are pre-compressed client-side (≤1600px, ≤800Ko, JPEG) - no server processing needed.
+// Returns { bytes } on success or { error } on failure - never swallows silently.
 async function fetchPhoto(url: string): Promise<{ bytes: Uint8Array } | { error: string }> {
   try {
     const res = await fetch(url);
@@ -108,7 +108,7 @@ async function logEmailEvent(rapportId: string, resendEmailId: string) {
   });
 }
 
-// Build the email HTML body — differentiated content for bailleur vs locataire
+// Build the email HTML body - differentiated content for bailleur vs locataire
 function buildEmailHtml(params: {
   role: 'bailleur' | 'locataire';
   adresse: string;
@@ -137,11 +137,11 @@ function buildEmailHtml(params: {
 
   return `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#1a1a1a">État des lieux — ${params.adresse}</h2>
+      <h2 style="color:#1a1a1a">État des lieux - ${params.adresse}</h2>
       <p>${roleIntro} le PDF de l'état des lieux <strong>${params.typeEdl.toLowerCase()}</strong>
       du bien situé au <strong>${params.adresse}</strong>, établi le ${params.date}.</p>
       <p>
-        📄 <strong>PDF joint</strong> — document légal de référence, conservé 9 ans.
+        📄 <strong>PDF joint</strong> - document légal de référence, conservé 9 ans.
       </p>
       ${zipSection}
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
@@ -165,7 +165,7 @@ Deno.serve(async (req: Request) => {
     return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
   }
 
-  // Verify JWT — required now that --no-verify-jwt is removed
+  // Verify JWT - required now that --no-verify-jwt is removed
   const authHeader = req.headers.get('Authorization');
   const token = authHeader?.replace('Bearer ', '').trim();
   if (!token) {
@@ -208,7 +208,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // 2a. Guard — rapport must belong to the authenticated user
+  // 2a. Guard - rapport must belong to the authenticated user
   if (rapport.user_id !== user.id) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       status: 403,
@@ -216,7 +216,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // 2b. Guard — idempotence: only process from pdf_generated
+  // 2b. Guard - idempotence: only process from pdf_generated
   if (rapport.status !== 'pdf_generated') {
     return new Response(
       JSON.stringify({ error: 'Already processed', status: rapport.status }),
@@ -241,17 +241,17 @@ Deno.serve(async (req: Request) => {
       const result = await fetchPhoto(url);
       if ('bytes' in result) {
         zip.file(fileName, result.bytes);
-        console.log(`[photo ${i + 1}/${photoUrls.length}] OK — ${result.bytes.length} bytes`);
+        console.log(`[photo ${i + 1}/${photoUrls.length}] OK - ${result.bytes.length} bytes`);
       } else {
         console.error(`[photo ${i + 1}/${photoUrls.length}] FAILED: ${result.error}`);
-        photoErrors.push(`${fileName} — source: ${url} — erreur: ${result.error}`);
+        photoErrors.push(`${fileName} - source: ${url} - erreur: ${result.error}`);
       }
     }
 
     if (photoErrors.length > 0) {
       const errorList = photoErrors.join('\n');
       zip.file('ERREURS.txt', `Photos manquantes dans ce dossier :\n\n${errorList}`);
-      console.warn(`${photoErrors.length} photo(s) failed — ERREURS.txt added to ZIP`);
+      console.warn(`${photoErrors.length} photo(s) failed - ERREURS.txt added to ZIP`);
     }
 
     const zipBytes: Uint8Array = await zip.generateAsync({
@@ -289,13 +289,13 @@ Deno.serve(async (req: Request) => {
       await supabase.storage.from('photos-etats-des-lieux').remove(pathsToDelete);
     }
 
-    // 9. Generate signed URL (7 days — ZIP physically deleted by cron 48h after email_delivered)
+    // 9. Generate signed URL (7 days - ZIP physically deleted by cron 48h after email_delivered)
     const { data: signedData } = await supabase.storage
       .from('edl-zips')
       .createSignedUrl(zipPath, 60 * 60 * 24 * 7);
     zipSignedUrl = signedData?.signedUrl ?? null;
   } else {
-    // No photos — skip ZIP, transition directly
+    // No photos - skip ZIP, transition directly
     await supabase
       .from('rapports')
       .update({ status: 'zip_created' })
@@ -324,7 +324,7 @@ Deno.serve(async (req: Request) => {
   const date = (rapport.data as Record<string, unknown>)?.metadata
     ? ((rapport.data as Record<string, { date?: string }>).metadata?.date ?? new Date().toLocaleDateString('fr-FR'))
     : new Date().toLocaleDateString('fr-FR');
-  const subject = `État des lieux ${typeEdl.toLowerCase()} — ${adresse}`;
+  const subject = `État des lieux ${typeEdl.toLowerCase()} - ${adresse}`;
 
   // 11. Send emails
   const baileurEmailId = await sendEmail({
@@ -344,7 +344,7 @@ Deno.serve(async (req: Request) => {
   });
 
   if (!baileurEmailId && !locataireEmailId) {
-    // Both failed — keep at zip_created so frontend can retry
+    // Both failed - keep at zip_created so frontend can retry
     return new Response(
       JSON.stringify({ error: 'Email send failed', canRetry: true }),
       { status: 502, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
