@@ -771,22 +771,44 @@ export default function EdlForm() {
               </div>
               
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Adresse du bien loué</label>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                  Adresse du bien loué <span className="text-red-400">*</span>
+                </label>
                 <input
                   type="text"
                   placeholder="15 rue de Rivoli, 75001 Paris"
-                  className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full p-3 rounded-xl border outline-none focus:ring-2 transition ${
+                    formData.metadata.adresse_bien && formData.metadata.adresse_bien.length <= 5
+                      ? 'border-red-400 bg-red-50 focus:ring-red-200'
+                      : 'border-slate-300 bg-slate-50 focus:ring-blue-500'
+                  }`}
                   value={formData.metadata.adresse_bien}
-                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, adresse_bien: e.target.value}})}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData(prev => ({
+                      ...prev,
+                      metadata: {
+                        ...prev.metadata,
+                        adresse_bien: val,
+                        lieu_signature:
+                          prev.metadata.lieu_signature === '' || prev.metadata.lieu_signature === prev.metadata.adresse_bien
+                            ? val
+                            : prev.metadata.lieu_signature,
+                      },
+                    }));
+                  }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Lieu de signature</label>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                  Lieu de signature
+                  <span className="normal-case font-normal text-slate-400 ml-1">(par défaut : adresse du bien)</span>
+                </label>
                 <input
                   type="text"
                   placeholder="15 rue de Rivoli, 75001 Paris"
-                  className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 transition"
                   value={formData.metadata.lieu_signature}
                   onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, lieu_signature: e.target.value}})}
                 />
@@ -801,24 +823,45 @@ export default function EdlForm() {
                 <h3 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-2">
                   <User size={16} className="text-blue-600" /> Bailleur
                 </h3>
-                <input
-                  type="text" placeholder="Nom complet / Raison sociale"
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm"
-                  value={formData.metadata.bailleur.nom}
-                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, nom: e.target.value}}})}
-                />
-                <input
-                  type="text" placeholder="Adresse du bailleur"
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm"
-                  value={formData.metadata.bailleur.adresse}
-                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, adresse: e.target.value}}})}
-                />
-                <input
-                  type="email" placeholder="Email du Bailleur"
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm"
-                  value={formData.metadata.bailleur.email}
-                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, email: e.target.value}}})}
-                />
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Nom complet / Raison sociale <span className="text-red-400">*</span></label>
+                  <input
+                    type="text" placeholder="Nom complet / Raison sociale"
+                    className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 transition ${
+                      formData.metadata.bailleur.nom && formData.metadata.bailleur.nom.length <= 2
+                        ? 'border-red-400 bg-red-50 focus:ring-red-200'
+                        : 'border-slate-300 focus:ring-blue-500'
+                    }`}
+                    value={formData.metadata.bailleur.nom}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, nom: e.target.value}}})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Adresse du bailleur <span className="text-red-400">*</span></label>
+                  <input
+                    type="text" placeholder="Adresse du bailleur"
+                    className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 transition ${
+                      formData.metadata.bailleur.adresse && formData.metadata.bailleur.adresse.length <= 3
+                        ? 'border-red-400 bg-red-50 focus:ring-red-200'
+                        : 'border-slate-300 focus:ring-blue-500'
+                    }`}
+                    value={formData.metadata.bailleur.adresse}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, adresse: e.target.value}}})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Email du bailleur <span className="text-red-400">*</span></label>
+                  <input
+                    type="email" placeholder="Email du Bailleur"
+                    className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 transition ${
+                      formData.metadata.bailleur.email && !formData.metadata.bailleur.email.includes('@')
+                        ? 'border-red-400 bg-red-50 focus:ring-red-200'
+                        : 'border-slate-300 focus:ring-blue-500'
+                    }`}
+                    value={formData.metadata.bailleur.email}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, bailleur: {...formData.metadata.bailleur, email: e.target.value}}})}
+                  />
+                </div>
                 {/* Représentation bailleur */}
                 <label className="flex items-center gap-2 cursor-pointer pt-1">
                   <input
@@ -864,25 +907,46 @@ export default function EdlForm() {
                 <h3 className="text-sm font-bold text-slate-800 uppercase flex items-center gap-2">
                   <User size={16} className="text-blue-600" /> Locataire
                 </h3>
-                <input
-                  type="text" placeholder="Nom et Prénom"
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm"
-                  value={formData.metadata.locataire.nom}
-                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, nom: e.target.value}}})}
-                />
-                <input
-                  type="email" placeholder="Email du Locataire"
-                  className="w-full p-3 rounded-xl border border-slate-300 text-sm"
-                  value={formData.metadata.locataire.email}
-                  onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, email: e.target.value}}})}
-                />
-                {formData.metadata.type === "Sortie" && (
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Nom et Prénom <span className="text-red-400">*</span></label>
                   <input
-                    type="text" placeholder="Nouvelle adresse du locataire"
-                    className="w-full p-3 rounded-xl border border-slate-300 text-sm"
-                    value={formData.metadata.locataire.nouvelle_adresse}
-                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, nouvelle_adresse: e.target.value}}})}
+                    type="text" placeholder="Nom et Prénom"
+                    className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 transition ${
+                      formData.metadata.locataire.nom && formData.metadata.locataire.nom.length <= 2
+                        ? 'border-red-400 bg-red-50 focus:ring-red-200'
+                        : 'border-slate-300 focus:ring-blue-500'
+                    }`}
+                    value={formData.metadata.locataire.nom}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, nom: e.target.value}}})}
                   />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Email du locataire <span className="text-red-400">*</span></label>
+                  <input
+                    type="email" placeholder="Email du Locataire"
+                    className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 transition ${
+                      formData.metadata.locataire.email && !formData.metadata.locataire.email.includes('@')
+                        ? 'border-red-400 bg-red-50 focus:ring-red-200'
+                        : 'border-slate-300 focus:ring-blue-500'
+                    }`}
+                    value={formData.metadata.locataire.email}
+                    onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, email: e.target.value}}})}
+                  />
+                </div>
+                {formData.metadata.type === "Sortie" && (
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Nouvelle adresse du locataire <span className="text-red-400">*</span></label>
+                    <input
+                      type="text" placeholder="Nouvelle adresse du locataire"
+                      className={`w-full p-3 rounded-xl border text-sm outline-none focus:ring-2 transition ${
+                        formData.metadata.locataire.nouvelle_adresse && formData.metadata.locataire.nouvelle_adresse.length <= 3
+                          ? 'border-red-400 bg-red-50 focus:ring-red-200'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
+                      value={formData.metadata.locataire.nouvelle_adresse}
+                      onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, locataire: {...formData.metadata.locataire, nouvelle_adresse: e.target.value}}})}
+                    />
+                  </div>
                 )}
                 {/* Représentation locataire */}
                 <label className="flex items-center gap-2 cursor-pointer pt-1">
@@ -929,7 +993,7 @@ export default function EdlForm() {
   
               <div className="grid grid-cols-1 min-[450px]:grid-cols-[1fr_2fr] gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold uppercase text-slate-400">Nombre de clés</label>
+                  <label className="text-xs font-bold uppercase text-slate-400">Nombre de clés <span className="text-red-400">*</span></label>
                   <input
                     type="number" placeholder="0"
                     className="w-full p-2.5 rounded-xl border border-white bg-white shadow-sm"
@@ -938,7 +1002,7 @@ export default function EdlForm() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold uppercase text-slate-400">Type de chauffage</label>
+                  <label className="text-xs font-bold uppercase text-slate-400">Type de chauffage <span className="text-red-400">*</span></label>
                   <select
                     className="w-full p-3 rounded-xl border border-white bg-white shadow-sm"
                     value={formData.metadata.chauffage}
