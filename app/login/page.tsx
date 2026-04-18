@@ -124,8 +124,11 @@ export default function LoginPage() {
           {stage === 'code' && (
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-slate-500 mb-3">
+                <p className="text-xs text-slate-500 mb-1">
                   Code envoyé à <span className="font-semibold text-slate-700">{email}</span>. Valable 10 minutes.
+                </p>
+                <p className="text-base md:text-l font-bold text-amber-600 pt-1 mb-3">
+                  📬 Pensez à vérifier vos spams si vous ne le recevez pas.
                 </p>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                   Code à 6 chiffres

@@ -1597,6 +1597,9 @@ export default function EdlForm() {
                       <p className="font-semibold">Le PDF et les photos ont été envoyés à :</p>
                       <p>- {formData.metadata.bailleur.email}</p>
                       <p>- {formData.metadata.locataire.email}</p>
+                      <p className="text-lg md:text-l font-bold text-amber-600 pt-1">
+                        📬 Si le mail n'arrive pas, pensez à vérifier les spams.
+                      </p>
                     </div>
 
                     <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-sm text-blue-800">
@@ -1938,8 +1941,11 @@ export default function EdlForm() {
             {/* Stage : saisie du code OTP */}
             {authStage === 'code' && (
               <div className="space-y-3">
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mb-0">
                   Code envoyé à <span className="font-semibold text-slate-700">{authEmail}</span>. Valable 10 minutes.
+                </p>
+                <p className="text-lg md:text-l font-bold text-amber-600 pt-1">
+                  📬 Pensez à vérifier vos spams si vous ne le recevez pas.
                 </p>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
