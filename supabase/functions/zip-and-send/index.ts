@@ -122,10 +122,7 @@ function buildEmailHtml(params: {
         <p class="warning-text">⚠️ <strong>Téléchargez vos photos maintenant.</strong><br>
         Ce lien expire dans 48h. Passé ce délai, les photos seront définitivement supprimées conformément à notre politique Zéro Déchet.</p>
       </div>
-      <a href="${params.zipSignedUrl}" class="zip-link">📦 Télécharger le dossier photos</a>
-      <p style="color:#6b7280;font-family:sans-serif;font-size:12px;text-align:center;margin-top:4px;margin-bottom:16px;">
-        Lien direct : <a href="${params.zipSignedUrl}" style="color:#2563eb;word-break:break-all;">${params.zipSignedUrl}</a>
-      </p>`
+      <a href="${params.zipSignedUrl}" class="zip-link">📦 Télécharger le dossier photos</a>`
     : `<p style="color:#6b7280;font-family:sans-serif;font-size:13px;margin-bottom:16px;">Aucune photo n'a été jointe à cet état des lieux.</p>`;
 
   return `<!DOCTYPE html>
@@ -178,6 +175,17 @@ function buildEmailHtml(params: {
   </div>
 </body>
 </html>`;
+}
+
+function buildPdfFilename(adresse: string, typeEdl: string): string {
+  const slugify = (s: string) =>
+    s.normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  const date = new Date().toISOString().slice(0, 10);
+  return `EDL-${slugify(typeEdl)}-${slugify(adresse)}-${date}.pdf`;
 }
 
 // ─── Main handler ────────────────────────────────────────────────────────────
@@ -343,7 +351,7 @@ Deno.serve(async (req: Request) => {
 
   const pdfBytes = new Uint8Array(await pdfData.arrayBuffer());
   const pdfBase64 = btoa(String.fromCharCode(...pdfBytes));
-  const pdfFilename = `etat-des-lieux-${(rapport.adresse_bien as string).replace(/[^a-z0-9]/gi, '-').toLowerCase()}.pdf`;
+  const pdfFilename = buildPdfFilename(rapport.adresse_bien as string, rapport.type_edl as string);
 
   // Shared email params
   const adresse = rapport.adresse_bien as string;

@@ -6,6 +6,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
+function buildPdfFilename(adresse: string, typeEdl: string): string {
+  const slugify = (s: string) =>
+    s.normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  const date = new Date().toISOString().slice(0, 10);
+  return `EDL-${slugify(typeEdl)}-${slugify(adresse)}-${date}.pdf`;
+}
+
 // Extract path from a Supabase Storage public URL (edl-zips bucket)
 function extractZipPath(rapportId: string): string {
   return `${rapportId}/dossier-photos.zip`;
@@ -58,10 +69,7 @@ function buildResendHtml(params: {
         <p class="warning-text">⚠️ <strong>Téléchargez vos photos maintenant.</strong><br>
         Ce lien expire dans 48h. Passé ce délai, les photos seront définitivement supprimées conformément à notre politique Zéro Déchet.</p>
       </div>
-      <a href="${params.zipSignedUrl}" class="zip-link">📦 Télécharger le dossier photos</a>
-      <p style="color:#6b7280;font-family:sans-serif;font-size:12px;text-align:center;margin-top:4px;margin-bottom:16px;">
-        Lien direct : <a href="${params.zipSignedUrl}" style="color:#2563eb;word-break:break-all;">${params.zipSignedUrl}</a>
-      </p>`;
+      <a href="${params.zipSignedUrl}" class="zip-link">📦 Télécharger le dossier photos</a>`;
   } else {
     zipSection = `<p style="color:#6b7280;font-family:sans-serif;font-size:13px;margin-bottom:16px;">Aucune photo n'a été jointe à cet état des lieux.</p>`;
   }
@@ -75,7 +83,7 @@ function buildResendHtml(params: {
     .wrapper{width:100%;background-color:#f9fafb;padding:20px 0 40px}
     .container{max-width:450px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;padding:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,.1)}
     .logo{color:#2563eb;font-family:sans-serif;font-size:20px;font-weight:800;letter-spacing:-.5px;margin-bottom:24px;text-align:center;text-transform:lowercase}
-    .title{color:#111827;font-family:sans-serif;font-size:20px;font-weight:700;margin:0 0 16px}
+    .title{color:#111827;font-family:sans-serif;font-size:20px;font-weight:700;margin:0 0 16px; text-align: center;}
     .info-block{background-color:#f3f4f6;border-radius:8px;padding:12px 16px;margin-bottom:12px}
     .info-label{color:#6b7280;font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px}
     .info-value{color:#111827;font-family:sans-serif;font-size:14px;font-weight:600;margin:0}
@@ -177,7 +185,7 @@ export async function POST(req: NextRequest) {
   const bailleurEmail = newBailleurEmail ?? (rapport.bailleur_email as string);
   const locataireEmail = newLocataireEmail ?? (rapport.client_email as string);
   const subject = `[Renvoi] État des lieux ${typeEdl.toLowerCase()} - ${adresse}`;
-  const pdfFilename = `etat-des-lieux-${adresse.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.pdf`;
+  const pdfFilename = buildPdfFilename(adresse, typeEdl);
 
   // Download PDF
   const { data: pdfBlob, error: pdfErr } = await supabase.storage
