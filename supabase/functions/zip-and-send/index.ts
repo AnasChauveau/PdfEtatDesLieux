@@ -68,7 +68,7 @@ async function sendEmail(params: {
   pdfFilename: string;
 }): Promise<string | null> {
   const body = {
-    from: RESEND_FROM_EMAIL,
+    from: `Express EDL <${RESEND_FROM_EMAIL}>`,
     to: [params.to],
     subject: params.subject,
     html: params.html,
@@ -116,41 +116,68 @@ function buildEmailHtml(params: {
   date: string;
   zipSignedUrl: string | null;
 }): string {
-  const roleLabel = params.role === 'bailleur' ? 'bailleur' : 'locataire';
-  const roleIntro =
-    params.role === 'bailleur'
-      ? 'En tant que <strong>bailleur</strong>, vous trouverez ci-joint'
-      : 'En tant que <strong>locataire</strong>, vous trouverez ci-joint';
-
   const zipSection = params.zipSignedUrl
     ? `
-      <p>
-        📦 <strong>Dossier photos</strong> (lien valable 48h après réception) :<br>
-        <a href="${params.zipSignedUrl}">${params.zipSignedUrl}</a>
-      </p>
-      <p style="color:#888;font-size:12px;">
-        Les photos seront automatiquement supprimées 48h après livraison, conformément
-        à notre politique Zéro Déchet. Pensez à les télécharger avant cette date.<br>
-        Passé ce délai, seul le PDF joint fait foi comme document contradictoire.
+      <div class="warning">
+        <p class="warning-text">⚠️ <strong>Téléchargez vos photos maintenant.</strong><br>
+        Ce lien expire dans 48h. Passé ce délai, les photos seront définitivement supprimées conformément à notre politique Zéro Déchet.</p>
+      </div>
+      <a href="${params.zipSignedUrl}" class="zip-link">📦 Télécharger le dossier photos</a>
+      <p style="color:#6b7280;font-family:sans-serif;font-size:12px;text-align:center;margin-top:4px;margin-bottom:16px;">
+        Lien direct : <a href="${params.zipSignedUrl}" style="color:#2563eb;word-break:break-all;">${params.zipSignedUrl}</a>
       </p>`
-    : `<p style="color:#888;font-size:12px;">Aucune photo n'a été jointe à cet état des lieux.</p>`;
+    : `<p style="color:#6b7280;font-family:sans-serif;font-size:13px;margin-bottom:16px;">Aucune photo n'a été jointe à cet état des lieux.</p>`;
 
-  return `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#1a1a1a">État des lieux - ${params.adresse}</h2>
-      <p>${roleIntro} le PDF de l'état des lieux <strong>${params.typeEdl.toLowerCase()}</strong>
-      du bien situé au <strong>${params.adresse}</strong>, établi le ${params.date}.</p>
-      <p>
-        📄 <strong>PDF joint</strong> - document légal de référence, conservé 9 ans.
-      </p>
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body{margin:0;padding:0;width:100%!important;background-color:#f9fafb}
+    .wrapper{width:100%;background-color:#f9fafb;padding:20px 0 40px}
+    .container{max-width:450px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;padding:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,.1)}
+    .logo{color:#2563eb;font-family:sans-serif;font-size:20px;font-weight:800;letter-spacing:-.5px;margin-bottom:24px;text-align:center;text-transform:lowercase}
+    .title{color:#111827;font-family:sans-serif;font-size:20px;font-weight:700;margin:0 0 16px}
+    .info-block{background-color:#f3f4f6;border-radius:8px;padding:12px 16px;margin-bottom:12px}
+    .info-label{color:#6b7280;font-family:sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px}
+    .info-value{color:#111827;font-family:sans-serif;font-size:14px;font-weight:600;margin:0}
+    .pdf-note{background-color:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#1e40af;font-family:sans-serif;font-size:14px}
+    .zip-link{display:block;background-color:#2563eb;color:#ffffff!important;font-family:sans-serif;font-size:15px;font-weight:700;text-align:center;padding:12px 20px;border-radius:8px;text-decoration:none;margin-bottom:8px}
+    .warning{background-color:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:12px 16px;margin-bottom:12px}
+    .warning-text{color:#92400e;font-family:sans-serif;font-size:13px;line-height:20px;margin:0}
+    .footer{color:#9ca3af;font-family:sans-serif;font-size:12px;text-align:center;margin-top:24px;padding:0 20px;line-height:20px}
+    @media screen and (max-width:380px){.container{padding:16px!important;margin:10px!important}.title{font-size:18px!important}}
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="logo">express-edl</div>
+      <h1 class="title">Votre état des lieux est prêt</h1>
+      <div class="info-block">
+        <p class="info-label">Bien</p>
+        <p class="info-value">${params.adresse}</p>
+      </div>
+      <div class="info-block">
+        <p class="info-label">Type · Date</p>
+        <p class="info-value">${params.typeEdl} · ${params.date}</p>
+      </div>
+      <div class="info-block">
+        <p class="info-label">Destinataire</p>
+        <p class="info-value">${params.role === 'bailleur' ? 'Bailleur' : 'Locataire'}</p>
+      </div>
+      <div class="pdf-note">📄 <strong>PDF joint</strong> — document légal de référence, conservé 9 ans.</div>
       ${zipSection}
-      <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-      <p style="color:#888;font-size:12px;">
-        Ce message a été envoyé automatiquement par État des Lieux Pro.<br>
-        Le présent état des lieux a été établi contradictoirement entre les parties,
-        qui reconnaissent en avoir reçu un exemplaire.
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+      <p style="color:#6b7280;font-family:sans-serif;font-size:12px;line-height:18px;margin:0">
+        Ce message a été envoyé automatiquement par Express EDL.<br>
+        Le présent état des lieux a été établi contradictoirement entre les parties, qui reconnaissent en avoir reçu un exemplaire.
       </p>
-    </div>`;
+    </div>
+    <div class="footer">© 2026 Express EDL — L'état des lieux rapide et pro.</div>
+  </div>
+</body>
+</html>`;
 }
 
 // ─── Main handler ────────────────────────────────────────────────────────────
