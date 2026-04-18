@@ -112,14 +112,14 @@ function buildResendHtml(params: {
         <p class="info-label">Destinataire</p>
         <p class="info-value">${params.role === 'bailleur' ? 'Bailleur' : 'Locataire'}</p>
       </div>
-      <div class="pdf-note">📄 <strong>PDF joint</strong> — document légal de référence, conservé 9 ans.</div>
+      <div class="pdf-note">📄 <strong>PDF joint</strong> - document légal de référence, conservé 9 ans.</div>
       ${zipSection}
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
       <p style="color:#6b7280;font-family:sans-serif;font-size:12px;line-height:18px;margin:0">
         Renvoi suite à votre demande. Ce message a été envoyé par Express EDL.
       </p>
     </div>
-    <div class="footer">© 2026 Express EDL — L'état des lieux rapide et pro.</div>
+    <div class="footer">© 2026 Express EDL - L'état des lieux rapide et pro.</div>
   </div>
 </body>
 </html>`;

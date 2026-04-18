@@ -107,7 +107,7 @@ export default function LoginPage() {
                 Recevoir mon code <ArrowRight size={15} />
               </button>
               <p className="text-center text-xs text-slate-400">
-                Sans mot de passe — un code par email, valable 10 minutes.
+                Sans mot de passe - un code par email, valable 10 minutes.
               </p>
             </form>
           )}

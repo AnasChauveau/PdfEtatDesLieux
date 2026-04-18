@@ -1799,7 +1799,7 @@ export default function EdlForm() {
                   Dernière étape avant la signature
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Créez votre compte en 10 secondes — sans mot de passe
+                  Créez votre compte en 10 secondes - sans mot de passe
                 </p>
               </div>
             </div>

@@ -330,7 +330,7 @@ Auth demandée à la transition **étape 4 → 5** (juste avant signature), pas 
 - Modale inline OTP 3 étapes : email → code 6 chiffres → fermeture (l'utilisateur ne quitte jamais la page)
 - Photos conservées en mémoire React pendant toute la connexion (pas de redirect = pas de perte)
 - Auto-submit du code à 6 chiffres, cooldown 60s pour renvoyer, clavier numérique sur mobile
-- `/auth/callback` et `/auth/done` supprimés — plus nécessaires avec l'OTP
+- `/auth/callback` et `/auth/done` supprimés - plus nécessaires avec l'OTP
 - Mode A (connecté) : comportement transparent, aucune modale, photos uploadées immédiatement
 - Mode B (non connecté) : toutes les données en mémoire jusqu'à la clôture
 - RLS scopées `auth.uid() = user_id` sur `rapports` et `email_events`
@@ -450,7 +450,7 @@ Ordre d'implémentation recommandé :
     email_delivered/48h, zip_created+email_failed/72h (stuck), email_sent/7j (webhook absent) ;
     détection via email_events pour les règles basées sur transition ; CRON_SECRET en header ;
     déployer : `npx supabase functions deploy cron-purge` ; voir §8
-6. ~~**AUTH**~~ ✅ FAIT — OTP code 6 chiffres (remplace Magic Link) ; user_id sur rapports ; RLS anon→authenticated ; upload photos Mode B à la soumission ; photos conservées en mémoire (pas de redirect)
+6. ~~**AUTH**~~ ✅ FAIT - OTP code 6 chiffres (remplace Magic Link) ; user_id sur rapports ; RLS anon→authenticated ; upload photos Mode B à la soumission ; photos conservées en mémoire (pas de redirect)
 7. **Dashboard "Mes EDL"** (page /dashboard, liste des rapports du user connecté) ✅ FAIT
 8. **Mode brouillon localStorage** (0.5 j) - discret mais critique ✅ FAIT
 9. **Ajout pièces WC, parking, cave, balcon** ✅ FAIT
