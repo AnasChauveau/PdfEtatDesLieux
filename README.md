@@ -68,6 +68,9 @@ supabase functions deploy webhook-resend
 supabase functions deploy cron-purge
 ```
 
+## 📖 Documentation
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — Architecture détaillée, plus d'information sur le projet
+
 ## 📄 Licence
 
 Propriétaire. Tous droits réservés. Code publié pour inspection uniquement.
