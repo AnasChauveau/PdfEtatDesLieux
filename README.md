@@ -70,14 +70,14 @@ supabase functions deploy cron-purge
 
 ## 📖 Documentation
 
-- [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — Architecture détaillée, machine à états, flux de données
-- [`SECURITY.md`](./docs/SECURITY.md) — Modèle de sécurité, RLS, cryptographie
-- [`OPERATIONS.md`](./docs/OPERATIONS.md) — Runbook opérationnel
-- [`ROADMAP.md`](./docs/ROADMAP.md) — Vision produit, évolutions, scaling, paliers payants
-- [`PITCH.md`](./docs/PITCH.md) — Présentation commerciale
-- [`LEGAL.md`](./docs/LEGAL.md) — Base CGV, CGU, RGPD
-- [`CHEATSHEET-TECHNIQUE.md`](./docs/CHEATSHEET-TECHNIQUE.md) — Antisèche technique
-- [`CHEATSHEET-PRODUIT.md`](./docs/CHEATSHEET-PRODUIT.md) — Antisèche produit/business
+- [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) - Architecture détaillée, machine à états, flux de données
+- [`SECURITY.md`](./docs/SECURITY.md) - Modèle de sécurité, RLS, cryptographie
+- [`OPERATIONS.md`](./docs/OPERATIONS.md) - Runbook opérationnel
+- [`ROADMAP.md`](./docs/ROADMAP.md) - Vision produit, évolutions, scaling, paliers payants
+- [`PITCH.md`](./docs/PITCH.md) - Présentation commerciale
+- [`LEGAL.md`](./docs/LEGAL.md) - Base CGV, CGU, RGPD
+- [`CHEATSHEET-TECHNIQUE.md`](./docs/CHEATSHEET-TECHNIQUE.md) - Antisèche technique
+- [`CHEATSHEET-PRODUIT.md`](./docs/CHEATSHEET-PRODUIT.md) - Antisèche produit/business
 
 ## 📄 Licence
 
@@ -85,4 +85,4 @@ Propriétaire. Tous droits réservés. Code publié pour inspection uniquement.
 
 ## 👤 Contact
 
-Anas Chauveau — [express-edl.fr](https://express-edl.fr) — contact@express-edl.fr
+Anas Chauveau - [express-edl.fr](https://express-edl.fr) - contact@express-edl.fr
