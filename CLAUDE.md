@@ -499,9 +499,6 @@ eIDAS via Yousign, PWA offline complète.
   coup - Anas (nom du développeur de cette solution) veut pouvoir suivre et apprendre, pas juste valider.
 - **Parler français** dans les réponses, les commentaires de code peuvent rester
   en anglais (convention standard).
-- Anas est à un moment émotionnellement sensible sur ce projet : encourager
-  les bonnes décisions déjà prises, être pédagogue, éviter de tout remettre en
-  question sans raison forte.
 
 ## 💼 Arguments commerciaux à mettre en avant
 
